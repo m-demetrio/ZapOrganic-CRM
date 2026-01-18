@@ -5,7 +5,8 @@ import type {
   FunnelStep,
   IntegrationSettings,
   QuickReply,
-  MediaSource
+  MediaSource,
+  MediaDurationMode
 } from "../shared/schema";
 
 const FUNNEL_STORAGE_KEY = "zopFunnels";
@@ -830,7 +831,9 @@ const init = async () => {
         mediaCaption: step.mediaCaption?.trim() || undefined,
         fileName: step.fileName?.trim() || undefined,
         mediaFileData: source === "file" ? step.mediaFileData : undefined,
-        mediaMimeType: source === "file" ? step.mediaMimeType : undefined
+        mediaMimeType: source === "file" ? step.mediaMimeType : undefined,
+        mediaDurationMode: step.mediaDurationMode,
+        mediaDurationSec: step.mediaDurationSec
       };
 
       if (step.type === "webhook") {

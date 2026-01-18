@@ -1,5 +1,7 @@
 export type MediaSource = "url" | "file";
 
+export type MediaDurationMode = "manual" | "file";
+
 export type FunnelStep = {
   id: string;
   type: "text" | "delay" | "tag" | "webhook" | "audio" | "ptt" | "image" | "video" | "file";
@@ -15,6 +17,8 @@ export type FunnelStep = {
   fileName?: string;
   mediaFileData?: string;
   mediaMimeType?: string;
+  mediaDurationMode?: MediaDurationMode;
+  mediaDurationSec?: number;
 };
 
 export type Funnel = {

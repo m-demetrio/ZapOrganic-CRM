@@ -177,6 +177,32 @@ const handleRequest = (event) => {
     return;
   }
 
+  if (detail.type === "mark-composing" || detail.type === "mark-recording") {
+    const chatId = getDetailValue(detail, "chatId");
+    const value = Boolean(getDetailValue(detail, "value"));
+    if (!chatId) {
+      emitResponse(detail.id, { ok: false, error: "missing-chat" });
+      return;
+    }
+
+    const method = detail.type === "mark-composing" ? "markIsComposing" : "markIsRecording";
+    const wpp = window.WPP;
+    if (!wpp?.chat || typeof wpp.chat[method] !== "function") {
+      emitResponse(detail.id, { ok: false, error: "wpp-not-ready" });
+      return;
+    }
+
+    try {
+      const call = () => wpp.chat[method](chatId, value);
+      resolveMaybePromise(call(), () => {
+        emitResponse(detail.id, { ok: true });
+      });
+    } catch (error) {
+      emitResponse(detail.id, { ok: false, error: error?.message || String(error) });
+    }
+    return;
+  }
+
   if (detail.type === "send-file") {
     const chatId = getDetailValue(detail, "chatId");
     const file = getDetailValue(detail, "file");
