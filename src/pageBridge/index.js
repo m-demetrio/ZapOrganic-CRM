@@ -16,6 +16,25 @@ const emitResponse = (id, payload) => {
   );
 };
 
+const hasOwn = (target, key) => Object.prototype.hasOwnProperty.call(target, key);
+
+const getDetailValue = (detail, key) => {
+  if (!detail) {
+    return undefined;
+  }
+
+  if (hasOwn(detail, key)) {
+    return detail[key];
+  }
+
+  const payload = detail.payload;
+  if (payload && hasOwn(payload, key)) {
+    return payload[key];
+  }
+
+  return undefined;
+};
+
 const resolveMaybePromise = (value, callback) => {
   if (value && typeof value.then === "function") {
     value.then(callback).catch(() => callback(null));
@@ -64,6 +83,15 @@ const getActiveChat = () => {
   return null;
 };
 
+const getChatById = (chatId) => {
+  const wpp = window.WPP;
+  if (!wpp || !wpp.chat || typeof wpp.chat.getChat !== "function") {
+    return null;
+  }
+
+  return wpp.chat.getChat(chatId);
+};
+
 const handleRequest = (event) => {
   const detail = event.detail || {};
   if (!detail.id) {
@@ -78,10 +106,24 @@ const handleRequest = (event) => {
     return;
   }
 
-  if (detail.type === "send-message") {
-    const payload = detail.payload || {};
-    const chatId = payload.chatId;
-    const text = payload.text;
+  if (detail.type === "get-chat") {
+    const chatId = getDetailValue(detail, "chatId");
+    if (!chatId) {
+      emitResponse(detail.id, null);
+      return;
+    }
+
+    const result = getChatById(chatId);
+    resolveMaybePromise(result, (chat) => {
+      emitResponse(detail.id, serializeChat(chat));
+    });
+    return;
+  }
+
+  if (detail.type === "send-text" || detail.type === "send-message") {
+    const chatId = getDetailValue(detail, "chatId");
+    const text = getDetailValue(detail, "text");
+    const options = getDetailValue(detail, "options");
 
     if (!chatId || typeof text !== "string" || !text.trim()) {
       emitResponse(detail.id, { ok: false, error: "invalid-payload" });
@@ -94,12 +136,41 @@ const handleRequest = (event) => {
       return;
     }
 
-    Promise.resolve(wpp.chat.sendTextMessage(chatId, text))
+    Promise.resolve(wpp.chat.sendTextMessage(chatId, text, options))
       .then((result) => emitResponse(detail.id, { ok: true, result }))
       .catch((error) => {
         emitResponse(detail.id, { ok: false, error: error?.message || String(error) });
       });
+    return;
   }
+
+  if (detail.type === "send-file") {
+    const chatId = getDetailValue(detail, "chatId");
+    const file = getDetailValue(detail, "file");
+    const filename = getDetailValue(detail, "filename");
+    const caption = getDetailValue(detail, "caption");
+    const options = getDetailValue(detail, "options");
+
+    if (!chatId || !file) {
+      emitResponse(detail.id, { ok: false, error: "invalid-payload" });
+      return;
+    }
+
+    const wpp = window.WPP;
+    if (!wpp?.chat || typeof wpp.chat.sendFileMessage !== "function") {
+      emitResponse(detail.id, { ok: false, error: "wpp-not-ready" });
+      return;
+    }
+
+    Promise.resolve(wpp.chat.sendFileMessage(chatId, file, filename, caption, options))
+      .then((result) => emitResponse(detail.id, { ok: true, result }))
+      .catch((error) => {
+        emitResponse(detail.id, { ok: false, error: error?.message || String(error) });
+      });
+    return;
+  }
+
+  emitResponse(detail.id, { ok: false, error: "unsupported-request" });
 };
 
 const waitForWpp = () => {

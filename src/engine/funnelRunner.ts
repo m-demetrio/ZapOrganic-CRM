@@ -151,7 +151,11 @@ const waitWithCancel = async (runId: string, delayMs: number) => {
   });
 };
 
-const sendMessageViaPageBridge = async (chatId: string, text: string): Promise<SendMessageResult> => {
+const sendMessageViaPageBridge = async (
+  chatId: string,
+  text: string,
+  options?: Record<string, unknown>
+): Promise<SendMessageResult> => {
   if (typeof window === "undefined") {
     return { ok: false, error: "window-unavailable" };
   }
@@ -181,11 +185,10 @@ const sendMessageViaPageBridge = async (chatId: string, text: string): Promise<S
       new CustomEvent(REQUEST_EVENT, {
         detail: {
           id,
-          type: "send-message",
-          payload: {
-            chatId,
-            text
-          }
+          type: "send-text",
+          chatId,
+          text,
+          options
         }
       })
     );
