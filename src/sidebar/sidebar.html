@@ -84,7 +84,7 @@
               <rect x="13" y="13" width="7" height="7" rx="1.5" />
             </svg>
           </span>
-          <span class="zop-rail__label">Itens</span>
+          <span class="zop-rail__label">Respostas</span>
         </button>
         <button class="zop-rail__item" type="button" data-panel="ajustes">
           <span class="zop-rail__icon" aria-hidden="true">
@@ -122,39 +122,27 @@
           <div class="zop-filters">
             <label class="zop-input-wrap">
               <span class="zop-input__icon">/</span>
-              <input class="zop-input" type="search" placeholder="Buscar funil ou etapa" />
+              <input class="zop-input" id="zop-funnel-search" type="search" placeholder="Buscar funil ou etapa" />
             </label>
-            <label class="zop-toggle">
-              <input type="checkbox" />
-              <span class="zop-toggle__track"></span>
-              <span class="zop-toggle__label">Apenas favoritos</span>
-            </label>
-          </div>
-
-          <div class="zop-quick">
-            <button class="zop-chip is-active" type="button">Funis</button>
-            <button class="zop-chip" type="button">Fluxos</button>
-            <button class="zop-chip" type="button">Audios</button>
-            <button class="zop-chip" type="button">Mensagens</button>
-            <button class="zop-chip" type="button">Midia</button>
-            <button class="zop-chip" type="button">Docs</button>
           </div>
 
           <div class="zop-funnel">
             <div class="zop-funnel__active">
               <div class="zop-funnel__label">Conversa ativa</div>
               <div class="zop-funnel__chat" id="zop-active-chat">Nenhuma conversa selecionada</div>
-              <div class="zop-funnel__current">
-                Funil atual: <span id="zop-active-stage">Sem funil</span>
-              </div>
+              <div class="zop-funnel__current">Selecione um funil para executar no chat ativo.</div>
               <div class="zop-funnel__actions">
                 <button class="zop-button zop-button--ghost" id="zop-refresh-chat" type="button">
                   Atualizar conversa
                 </button>
-                <span class="zop-meta" id="zop-funnel-total">0 ativos</span>
+                <span class="zop-meta" id="zop-funnel-total">0 funis</span>
               </div>
             </div>
             <div class="zop-funnel__list" id="zop-funnel-list"></div>
+            <div class="zop-empty" id="zop-funnel-empty">
+              <div class="zop-empty__title">Nenhum funil encontrado</div>
+              <div class="zop-empty__text">Crie funis nas configuracoes para comecar.</div>
+            </div>
           </div>
         </section>
 
@@ -166,7 +154,8 @@
             </div>
             <button class="zop-button zop-button--ghost" type="button">Atualizar</button>
           </div>
-          <div class="zop-empty">
+          <div class="zop-run-list" id="zop-runs-list"></div>
+          <div class="zop-empty" id="zop-runs-empty">
             <div class="zop-empty__title">Nenhum envio ativo</div>
             <div class="zop-empty__text">Disparos e funis em execucao aparecerao aqui.</div>
           </div>
@@ -213,24 +202,15 @@
         <section class="zop-panel" data-panel="itens">
           <div class="zop-panel__header">
             <div>
-              <div class="zop-panel__title">Itens</div>
-              <div class="zop-panel__subtitle">Biblioteca de conteudos rapidos</div>
+              <div class="zop-panel__title">Respostas</div>
+              <div class="zop-panel__subtitle">Mensagens rapidas prontas para uso</div>
             </div>
             <button class="zop-button" type="button">Adicionar</button>
           </div>
-          <div class="zop-list">
-            <button class="zop-list__item" type="button">
-              <span class="zop-list__title">Tabela MAX</span>
-              <span class="zop-list__meta">Midia</span>
-            </button>
-            <button class="zop-list__item" type="button">
-              <span class="zop-list__title">Audio funil brother</span>
-              <span class="zop-list__meta">Audio</span>
-            </button>
-            <button class="zop-list__item" type="button">
-              <span class="zop-list__title">Mensagem boas vindas</span>
-              <span class="zop-list__meta">Texto</span>
-            </button>
+          <div class="zop-quickreply" id="zop-quickreply-list"></div>
+          <div class="zop-empty" id="zop-quickreply-empty">
+            <div class="zop-empty__title">Nenhuma resposta cadastrada</div>
+            <div class="zop-empty__text">Crie mensagens rapidas nas configuracoes.</div>
           </div>
         </section>
 

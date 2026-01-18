@@ -16,6 +16,7 @@ export type FunnelStepEvent = {
   stepId: string;
   stepIndex: number;
   step: FunnelStep;
+  resolvedDelaySec?: number;
   lead: LeadCard;
   ts: number;
 };
@@ -210,7 +211,8 @@ const emitStepEvent = (
   chatId: string,
   step: FunnelStep,
   stepIndex: number,
-  lead: LeadCard
+  lead: LeadCard,
+  resolvedDelaySec?: number
 ) => ({
   runId,
   funnelId,
@@ -218,6 +220,7 @@ const emitStepEvent = (
   stepId: step.id,
   stepIndex,
   step,
+  resolvedDelaySec,
   lead,
   ts: Date.now()
 });
@@ -240,17 +243,18 @@ const runFunnelSequence = async (runId: string, input: FunnelRunInput) => {
     }
 
     const step = funnel.steps[index];
-    const stepPayload = emitStepEvent(runId, funnel.id, chatId, step, index, currentLead);
+    const message = step.type === "text" ? step.text?.trim() ?? "" : "";
+    const shouldResolveDelay = step.type === "delay" || (step.type === "text" && message);
+    const resolvedDelaySec = shouldResolveDelay ? resolveDelaySec(step, defaultDelaySec) : undefined;
+    const stepPayload = emitStepEvent(runId, funnel.id, chatId, step, index, currentLead, resolvedDelaySec);
     emitEvent(listeners.stepStart, stepPayload);
 
     try {
       if (step.type === "text") {
-        const message = step.text?.trim() ?? "";
         if (!message) {
           warn("Skipping text step with empty message", step.id);
         } else {
-          const delaySec = resolveDelaySec(step, defaultDelaySec);
-          await waitWithCancel(runId, delaySec * 1000);
+          await waitWithCancel(runId, (resolvedDelaySec ?? 0) * 1000);
           if (state.cancelled) {
             break;
           }
@@ -261,8 +265,7 @@ const runFunnelSequence = async (runId: string, input: FunnelRunInput) => {
           }
         }
       } else if (step.type === "delay") {
-        const delaySec = resolveDelaySec(step, defaultDelaySec);
-        await waitWithCancel(runId, delaySec * 1000);
+        await waitWithCancel(runId, (resolvedDelaySec ?? 0) * 1000);
       } else if (step.type === "tag") {
         const tagsToAdd = step.addTags ?? [];
         if (tagsToAdd.length === 0) {
@@ -309,11 +312,14 @@ const runFunnelSequence = async (runId: string, input: FunnelRunInput) => {
         break;
       }
 
-      emitEvent(listeners.stepDone, emitStepEvent(runId, funnel.id, chatId, step, index, currentLead));
+      emitEvent(
+        listeners.stepDone,
+        emitStepEvent(runId, funnel.id, chatId, step, index, currentLead, resolvedDelaySec)
+      );
     } catch (error) {
       state.error = error;
       emitEvent(listeners.error, {
-        ...emitStepEvent(runId, funnel.id, chatId, step, index, currentLead),
+        ...emitStepEvent(runId, funnel.id, chatId, step, index, currentLead, resolvedDelaySec),
         error
       });
       logError("Step failed", step.id, error);

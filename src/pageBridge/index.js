@@ -120,6 +120,39 @@ const handleRequest = (event) => {
     return;
   }
 
+  if (detail.type === "insert-text") {
+    const chatId = getDetailValue(detail, "chatId");
+    const text = getDetailValue(detail, "text");
+
+    if (typeof text !== "string" || !text.trim()) {
+      emitResponse(detail.id, { ok: false, error: "invalid-payload" });
+      return;
+    }
+
+    const wpp = window.WPP;
+    if (!wpp?.chat || typeof wpp.chat.setInputText !== "function") {
+      emitResponse(detail.id, { ok: false, error: "wpp-not-ready" });
+      return;
+    }
+
+    try {
+      const call = () => {
+        if (chatId && wpp.chat.setInputText.length >= 2) {
+          return wpp.chat.setInputText(chatId, text);
+        }
+
+        return wpp.chat.setInputText(text);
+      };
+
+      resolveMaybePromise(call(), (result) => {
+        emitResponse(detail.id, { ok: true, result });
+      });
+    } catch (error) {
+      emitResponse(detail.id, { ok: false, error: error?.message || String(error) });
+    }
+    return;
+  }
+
   if (detail.type === "send-text" || detail.type === "send-message") {
     const chatId = getDetailValue(detail, "chatId");
     const text = getDetailValue(detail, "text");
