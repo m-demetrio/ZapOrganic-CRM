@@ -72,6 +72,55 @@ const delayFixed = resolveDelaySec({ delayExpr: "15" });
 console.log({ delayRand, delayRange, delayFixed });
 ```
 
+## Execucao manual de funis (console)
+
+1. Abra o WhatsApp Web com a extensao carregada.
+2. Abra o DevTools, selecione o contexto do content script (ex: "ZapOrganic CRM").
+3. Rode o snippet abaixo para iniciar um funil manualmente:
+
+```ts
+const runner = window.zopFunnelRunner;
+
+const funnel = {
+  id: "demo-funnel",
+  name: "Demo",
+  steps: [
+    { id: "step-1", type: "text", text: "Oi! Este e um teste." },
+    { id: "step-2", type: "delay", delaySec: 2 },
+    { id: "step-3", type: "tag", addTags: ["teste", "lead"] }
+  ]
+};
+
+const lead = {
+  id: "lead-demo",
+  chatId: "5511999999999@c.us",
+  title: "Lead Demo",
+  laneId: "novo",
+  tags: [],
+  lastUpdateAt: Date.now()
+};
+
+const integrationSettings = {
+  enableWebhook: false,
+  defaultDelaySec: 0
+};
+
+runner.onStepStart((event) => console.log("start", event));
+runner.onStepDone((event) => console.log("done", event));
+runner.onError((event) => console.error("error", event));
+runner.onFinished((event) => console.log("finished", event));
+
+const runId = runner.runFunnel({
+  funnel,
+  chatId: lead.chatId,
+  lead,
+  integrationSettings
+});
+
+// Para cancelar:
+// runner.cancel(runId);
+```
+
 ## Estrutura
 
 ```

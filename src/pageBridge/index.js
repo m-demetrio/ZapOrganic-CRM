@@ -66,14 +66,40 @@ const getActiveChat = () => {
 
 const handleRequest = (event) => {
   const detail = event.detail || {};
-  if (detail.type !== "active-chat" || !detail.id) {
+  if (!detail.id) {
     return;
   }
 
-  const result = getActiveChat();
-  resolveMaybePromise(result, (chat) => {
-    emitResponse(detail.id, serializeChat(chat));
-  });
+  if (detail.type === "active-chat") {
+    const result = getActiveChat();
+    resolveMaybePromise(result, (chat) => {
+      emitResponse(detail.id, serializeChat(chat));
+    });
+    return;
+  }
+
+  if (detail.type === "send-message") {
+    const payload = detail.payload || {};
+    const chatId = payload.chatId;
+    const text = payload.text;
+
+    if (!chatId || typeof text !== "string" || !text.trim()) {
+      emitResponse(detail.id, { ok: false, error: "invalid-payload" });
+      return;
+    }
+
+    const wpp = window.WPP;
+    if (!wpp?.chat || typeof wpp.chat.sendTextMessage !== "function") {
+      emitResponse(detail.id, { ok: false, error: "wpp-not-ready" });
+      return;
+    }
+
+    Promise.resolve(wpp.chat.sendTextMessage(chatId, text))
+      .then((result) => emitResponse(detail.id, { ok: true, result }))
+      .catch((error) => {
+        emitResponse(detail.id, { ok: false, error: error?.message || String(error) });
+      });
+  }
 };
 
 const waitForWpp = () => {
