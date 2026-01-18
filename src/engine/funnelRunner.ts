@@ -464,7 +464,7 @@ const buildSendFileOptions = (
     options.mimetype = media.mimeType;
   }
 
-  if (caption) {
+  if (caption && step.type !== "ptt" && step.type !== "ptv") {
     options.caption = caption;
   }
 
@@ -476,6 +476,20 @@ const buildSendFileOptions = (
   }
 
   return options;
+};
+
+const stripSendFileOptions = (options: Record<string, unknown>) => {
+  const keep: Record<string, unknown> = {};
+  if (typeof options.type === "string") {
+    keep.type = options.type;
+  }
+  if (options.isPtt) {
+    keep.isPtt = true;
+  }
+  if (options.isPtv) {
+    keep.isPtv = true;
+  }
+  return keep;
 };
 
 const getSendFileTimeoutMs = (step: FunnelStep) => {
@@ -514,16 +528,35 @@ const sendMediaStep = async (chatId: string, step: FunnelStep) => {
 
   const primaryOptions = buildSendFileOptions(step, media, caption);
   const result = await sendFile(primaryOptions);
-  if (!result?.ok && step.type === "video") {
-    const fallback = await sendFile(buildSendFileOptions(step, media, caption, "video"));
-    if (!fallback?.ok) {
-      throw new Error(fallback?.error || "send-file-failed");
-    }
+  if (!result) {
+    warn("Send file timeout, continuing", step.id, step.type);
     return true;
   }
-
-  if (!result?.ok) {
-    throw new Error(result?.error || "send-file-failed");
+  if (!result.ok) {
+    if (step.type === "ptv" || step.type === "video") {
+      warn("Send file failed for video, continuing without retry", step.id, step.type, result.error);
+      return true;
+    }
+    const fallbackOptions =
+      step.type === "video" || step.type === "ptv"
+        ? buildSendFileOptions(step, media, caption, "video")
+        : buildSendFileOptions(step, media, caption);
+    const fallback = await sendFile(fallbackOptions);
+    if (!fallback) {
+      warn("Send file timeout on retry, continuing", step.id, step.type);
+      return true;
+    }
+    if (!fallback.ok) {
+      const minimalOptions = stripSendFileOptions(fallbackOptions);
+      const minimal = await sendFile(minimalOptions);
+      if (!minimal) {
+        warn("Send file timeout on minimal retry, continuing", step.id, step.type);
+        return true;
+      }
+      if (!minimal.ok) {
+        throw new Error(minimal.error || fallback.error || result.error || "send-file-failed");
+      }
+    }
   }
 
   return true;

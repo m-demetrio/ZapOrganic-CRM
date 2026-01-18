@@ -50,6 +50,9 @@ type FunnelRunView = {
   currentStep?: FunnelStep;
   status: "running" | "completed" | "cancelled" | "error";
   statusDetail?: string;
+  statusDetailBase?: string;
+  countdownEndAt?: number;
+  countdownLabel?: string;
   errorMessage?: string;
   updatedAt: number;
 };
@@ -368,6 +371,31 @@ export const mountSidebar = () => {
     return `Aguardando ${delaySec} s...`;
   };
 
+  const isMediaStep = (step: FunnelStep) =>
+    step.type === "audio" ||
+    step.type === "ptt" ||
+    step.type === "ptv" ||
+    step.type === "image" ||
+    step.type === "video" ||
+    step.type === "file";
+
+  const getStepTimeoutSec = (step: FunnelStep) => {
+    switch (step.type) {
+      case "video":
+      case "ptv":
+        return 120;
+      case "audio":
+      case "ptt":
+        return 60;
+      case "file":
+        return 90;
+      case "image":
+        return 45;
+      default:
+        return 30;
+    }
+  };
+
   const getFunnelRunner = () => {
     const target = window as Window &
       typeof globalThis & {
@@ -411,8 +439,20 @@ export const mountSidebar = () => {
       run.currentStepIndex = event.stepIndex;
       run.currentStep = event.step;
       run.status = "running";
-      run.statusDetail =
-        formatDelayStatus(event.step, event.resolvedDelaySec) || `${formatStepType(event.step)} em andamento`;
+      run.statusDetailBase = `${formatStepType(event.step)} em andamento`;
+      run.statusDetail = formatDelayStatus(event.step, event.resolvedDelaySec) || run.statusDetailBase;
+      if (event.resolvedDelaySec && event.resolvedDelaySec > 0) {
+        run.countdownEndAt = event.ts + event.resolvedDelaySec * 1000;
+        run.countdownLabel = "Aguardando";
+        ensureCountdownTimer();
+      } else if (isMediaStep(event.step)) {
+        run.countdownEndAt = event.ts + getStepTimeoutSec(event.step) * 1000;
+        run.countdownLabel = "Enviando";
+        ensureCountdownTimer();
+      } else {
+        run.countdownEndAt = undefined;
+        run.countdownLabel = undefined;
+      }
       run.updatedAt = Date.now();
       renderRuns();
     });
@@ -427,6 +467,9 @@ export const mountSidebar = () => {
       run.currentStepIndex = event.stepIndex;
       run.currentStep = event.step;
       run.statusDetail = `${formatStepType(event.step)} concluida`;
+      run.statusDetailBase = undefined;
+      run.countdownEndAt = undefined;
+      run.countdownLabel = undefined;
       run.updatedAt = Date.now();
       renderRuns();
     });
@@ -440,6 +483,9 @@ export const mountSidebar = () => {
       run.status = "error";
       run.errorMessage = event.error ? String(event.error) : "Erro desconhecido";
       run.statusDetail = run.errorMessage;
+      run.statusDetailBase = undefined;
+      run.countdownEndAt = undefined;
+      run.countdownLabel = undefined;
       run.updatedAt = Date.now();
       renderRuns();
     });
@@ -460,6 +506,9 @@ export const mountSidebar = () => {
       } else if (event.status === "error") {
         run.statusDetail = run.errorMessage || "Erro";
       }
+      run.statusDetailBase = undefined;
+      run.countdownEndAt = undefined;
+      run.countdownLabel = undefined;
       renderRuns();
     });
   };
@@ -653,6 +702,40 @@ export const mountSidebar = () => {
 
       runsList.appendChild(card);
     });
+  };
+
+  const updateCountdowns = () => {
+    const now = Date.now();
+    let changed = false;
+    runs.forEach((run) => {
+      if (run.status !== "running" || !run.countdownEndAt) {
+        return;
+      }
+
+      const remaining = Math.max(0, Math.ceil((run.countdownEndAt - now) / 1000));
+      if (remaining > 0) {
+        const label = run.countdownLabel || "Aguardando";
+        run.statusDetail = `${label} ${remaining}s`;
+        changed = true;
+        return;
+      }
+
+      run.countdownEndAt = undefined;
+      run.statusDetail = run.statusDetailBase ?? run.statusDetail;
+      changed = true;
+    });
+
+    if (changed) {
+      renderRuns();
+    }
+  };
+
+  let countdownTimer: number | null = null;
+  const ensureCountdownTimer = () => {
+    if (countdownTimer) {
+      return;
+    }
+    countdownTimer = window.setInterval(updateCountdowns, 1000);
   };
 
   const loadFunnels = async () => {

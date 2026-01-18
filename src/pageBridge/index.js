@@ -250,28 +250,7 @@ const handleRequest = (event) => {
       return;
     }
 
-    const normalizeFile = (value) => {
-      if (typeof value !== "string" || !value.startsWith("data:")) {
-        return value;
-      }
-
-      try {
-        const [meta, encoded] = value.split(",");
-        const match = meta.match(/data:(.*?);base64/);
-        const mimeType = match?.[1] ?? "application/octet-stream";
-        const byteString = atob(encoded);
-        const arrayBuffer = new Uint8Array(byteString.length);
-        for (let index = 0; index < byteString.length; index += 1) {
-          arrayBuffer[index] = byteString.charCodeAt(index);
-        }
-        return new Blob([arrayBuffer], { type: mimeType });
-      } catch {
-        return value;
-      }
-    };
-
-    const normalizedOptions =
-      options && typeof options === "object" ? { ...options } : {};
+    const normalizedOptions = options && typeof options === "object" ? { ...options } : {};
     if (filename && !normalizedOptions.filename) {
       normalizedOptions.filename = filename;
     }
@@ -279,9 +258,7 @@ const handleRequest = (event) => {
       normalizedOptions.caption = caption;
     }
 
-    const payloadFile = normalizeFile(file);
-
-    Promise.resolve(wpp.chat.sendFileMessage(chatId, payloadFile, normalizedOptions))
+    Promise.resolve(wpp.chat.sendFileMessage(chatId, file, normalizedOptions))
       .then((result) => emitResponse(detail.id, { ok: true, result }))
       .catch((error) => {
         emitResponse(detail.id, { ok: false, error: error?.message || String(error) });
