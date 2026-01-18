@@ -20,6 +20,12 @@ const MEDIA_STEP_TYPES = new Set<FunnelStep["type"]>(["audio", "ptt", "image", "
 const DEFAULT_MEDIA_SOURCE: MediaSource = "url";
 const MEDIA_FILE_ACCEPT =
   "audio/*,video/*,image/*,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+const DEFAULT_MEDIA_DURATION_MODE: MediaDurationMode = "manual";
+const DURATION_MODE_OPTIONS: MediaDurationMode[] = ["manual", "file"];
+const DURATION_MODE_LABELS: Record<MediaDurationMode, string> = {
+  manual: "Usar tempo manual (aleatório)",
+  file: "Usar duração do arquivo"
+};
 const QUICK_REPLY_STAGE_KEY = "draft";
 
 type StatusTone = "info" | "success" | "error";
@@ -63,6 +69,27 @@ const readFileAsDataUrl = (file: File) =>
     reader.readAsDataURL(file);
   });
 
+const estimateMediaDuration = (dataUrl: string, type: "audio" | "video") =>
+  new Promise<number>((resolve) => {
+    const element = document.createElement(type === "audio" ? "audio" : "video");
+    element.preload = "metadata";
+    const cleanup = () => {
+      element.removeAttribute("src");
+      element.load();
+      element.remove();
+    };
+
+    const finish = () => {
+      const duration = Number.isFinite(element.duration) ? Math.ceil(element.duration) : 0;
+      cleanup();
+      resolve(duration);
+    };
+
+    element.addEventListener("loadedmetadata", finish, { once: true });
+    element.addEventListener("error", () => finish(), { once: true });
+    element.src = dataUrl;
+  });
+
 const createEmptyFunnel = (): Funnel => ({
   id: createId("funnel"),
   name: "",
@@ -87,7 +114,8 @@ const normalizeFunnels = (raw: Funnel[]) =>
     steps: Array.isArray(funnel.steps)
       ? funnel.steps.map((step) => ({
           ...step,
-          mediaSource: step.mediaSource ?? DEFAULT_MEDIA_SOURCE
+          mediaSource: step.mediaSource ?? DEFAULT_MEDIA_SOURCE,
+          mediaDurationMode: step.mediaDurationMode ?? DEFAULT_MEDIA_DURATION_MODE
         }))
       : []
   }));
@@ -119,15 +147,23 @@ const formatMediaTypeLabel = (type?: QuickReply["mediaType"]) => {
 };
 
 const getQuickReplyPreview = (reply: QuickReply) => {
-  const tagLabel = reply.businessTags && reply.businessTags.length ? ` | Etiquetas: ${reply.businessTags.join(', ')}` : '';
-
-  if (reply.mediaType && reply.mediaType !== 'text') {
-    const trimmedUrl = reply.mediaSource === 'file' ? reply.fileName ?? 'Arquivo' : reply.mediaUrl?.split('/')?.pop() ?? reply.mediaUrl ?? 'URL';
-    return `${formatMediaTypeLabel(reply.mediaType)} | ${trimmedUrl}${tagLabel}`;
+  const parts: string[] = [];
+  if (reply.mediaType && reply.mediaType !== "text") {
+    const trimmedUrl =
+      reply.mediaSource === "file"
+        ? reply.fileName ?? "Arquivo"
+        : reply.mediaUrl?.split("/")?.pop() ?? reply.mediaUrl ?? "URL";
+    parts.push(formatMediaTypeLabel(reply.mediaType));
+    parts.push(trimmedUrl);
+  } else {
+    parts.push(reply.message?.slice(0, 40) || "Sem mensagem");
   }
 
-  const messagePreview = reply.message?.slice(0, 40) || 'Sem mensagem';
-  return `${messagePreview}${tagLabel}`;
+  if (reply.businessTags && reply.businessTags.length > 0) {
+    parts.push(`Etiquetas: ${reply.businessTags.join(", ")}`);
+  }
+
+  return parts.join(" | ");
 };
 
 
@@ -225,11 +261,47 @@ const init = async () => {
     string,
     { mediaFileData?: string; mediaMimeType?: string; fileName?: string }
   >();
+  let draggedStepId: string | null = null;
+  let dropTargetElement: HTMLElement | null = null;
+
+  const clearDropState = () => {
+    if (dropTargetElement) {
+      dropTargetElement.classList.remove("step--drop-target");
+      dropTargetElement = null;
+    }
+  };
+
+  const moveStep = (fromId: string, toId: string) => {
+    const fromIndex = activeFunnel.steps.findIndex((item) => item.id === fromId);
+    const toIndex = activeFunnel.steps.findIndex((item) => item.id === toId);
+    if (fromIndex === -1 || toIndex === -1) {
+      return;
+    }
+
+    const [step] = activeFunnel.steps.splice(fromIndex, 1);
+    activeFunnel.steps.splice(toIndex, 0, step);
+    renderSteps();
+  };
 
   const updateStepFileLabel = (element: HTMLElement, name?: string) => {
     const label = element.querySelector<HTMLElement>("[data-field='mediaFileLabel']");
     if (label) {
       label.textContent = name ? `Arquivo: ${name}` : "Nenhum arquivo selecionado";
+    }
+  };
+  const updateStepDurationHint = (
+    element: HTMLElement,
+    step: FunnelStep,
+    mode: MediaDurationMode
+  ) => {
+    const hint = element.querySelector<HTMLElement>("[data-field='mediaDurationHint']") ?? element;
+    if (!hint) {
+      return;
+    }
+    if (mode === "file" && typeof step.mediaDurationSec === "number" && step.mediaDurationSec > 0) {
+      hint.textContent = `Usando duração do arquivo: ${step.mediaDurationSec}s`;
+    } else {
+      hint.textContent = "Tempo automático (5-10s) será utilizado";
     }
   };
   const getQuickReplyMediaStageKey = () => activeQuickReplyId ?? QUICK_REPLY_STAGE_KEY;
@@ -340,6 +412,40 @@ const init = async () => {
       stepElement.dataset.stepType = step.type;
       stepElement.dataset.mediaSource = step.mediaSource ?? DEFAULT_MEDIA_SOURCE;
       stepElement.draggable = true;
+      stepElement.addEventListener("dragstart", () => {
+        draggedStepId = step.id;
+        stepElement.classList.add("is-dragging");
+        clearDropState();
+      });
+      stepElement.addEventListener("dragend", () => {
+        draggedStepId = null;
+        stepElement.classList.remove("is-dragging");
+        clearDropState();
+      });
+      stepElement.addEventListener("dragover", (event) => {
+        if (draggedStepId === step.id) {
+          return;
+        }
+        event.preventDefault();
+        if (dropTargetElement && dropTargetElement !== stepElement) {
+          dropTargetElement.classList.remove("step--drop-target");
+        }
+        dropTargetElement = stepElement;
+        dropTargetElement.classList.add("step--drop-target");
+      });
+      stepElement.addEventListener("dragleave", () => {
+        if (dropTargetElement === stepElement) {
+          clearDropState();
+        }
+      });
+      stepElement.addEventListener("drop", (event) => {
+        event.preventDefault();
+        if (!draggedStepId) {
+          return;
+        }
+        clearDropState();
+        moveStep(draggedStepId, step.id);
+      });
       stepElement.innerHTML = `
         <div class="step__header">
           <div class="step__meta">
@@ -445,6 +551,16 @@ const init = async () => {
             <span>Nome do arquivo (ex: documento.pdf)</span>
             <input class="input" data-field="fileName" type="text" placeholder="documento.pdf" />
           </label>
+          <div class="field-grid media-duration">
+            <label class="field">
+              <span>Duração do envio</span>
+              <select class="input input--small" data-field="mediaDurationMode">
+                <option value="manual">Manual (aleatório)</option>
+                <option value="file">Usar duração do arquivo</option>
+              </select>
+            </label>
+            <div class="media-duration__hint" data-field="mediaDurationHint">Tempo automático (5-10s) será utilizado</div>
+          </div>
         </div>
       `;
 
@@ -510,6 +626,15 @@ const init = async () => {
         fileNameInput.value = step.fileName ?? "";
       }
       updateStepFileLabel(stepElement, step.fileName);
+      const durationModeSelect = stepElement.querySelector<HTMLSelectElement>(
+        "select[data-field='mediaDurationMode']"
+      );
+      const resolvedDurationMode = step.mediaDurationMode ?? DEFAULT_MEDIA_DURATION_MODE;
+      if (durationModeSelect) {
+        durationModeSelect.value = resolvedDurationMode;
+      }
+      stepElement.dataset.mediaDurationMode = resolvedDurationMode;
+      updateStepDurationHint(stepElement, step, resolvedDurationMode);
 
       const moveUp = stepElement.querySelector<HTMLButtonElement>("button[data-action='move-up']");
       if (moveUp) {
@@ -641,9 +766,13 @@ const init = async () => {
 
       const preview = document.createElement("div");
       preview.className = "list-item__meta";
-      preview.textContent = reply.message?.slice(0, 40) || "";
+      preview.textContent = getQuickReplyPreview(reply);
 
-      button.append(info, preview);
+      const badge = document.createElement("span");
+      badge.className = "list-item__badge";
+      badge.textContent = formatMediaTypeLabel(reply.mediaType);
+
+      button.append(info, preview, badge);
       button.addEventListener("click", () => {
         setActiveQuickReply(reply);
         renderQuickReplyList();
@@ -1030,8 +1159,17 @@ const init = async () => {
     }
 
     if (field === "mediaSource") {
-      step.mediaSource = (target as HTMLSelectElement).value as MediaSource;
-      stepElement.dataset.mediaSource = step.mediaSource;
+      const value = (target as HTMLSelectElement).value as MediaSource;
+      step.mediaSource = value;
+      stepElement.dataset.mediaSource = value;
+      return;
+    }
+
+    if (field === "mediaDurationMode") {
+      const value = (target as HTMLSelectElement).value as MediaDurationMode;
+      step.mediaDurationMode = value;
+      stepElement.dataset.mediaDurationMode = value;
+      updateStepDurationHint(stepElement, step, value);
       return;
     }
 
@@ -1042,20 +1180,31 @@ const init = async () => {
         step.mediaFileData = undefined;
         step.mediaMimeType = undefined;
         step.fileName = undefined;
+        step.mediaDurationSec = undefined;
         updateStepFileLabel(stepElement, undefined);
+        updateStepDurationHint(stepElement, step, step.mediaDurationMode ?? DEFAULT_MEDIA_DURATION_MODE);
         return;
       }
 
+      step.mediaSource = "file";
+      step.fileName = file.name;
       const fileLabel = stepElement.querySelector<HTMLElement>("[data-field='mediaFileLabel']");
       if (fileLabel) {
         fileLabel.textContent = `Arquivo: ${file.name}`;
       }
 
-      void readFileAsDataUrl(file).then((result) => {
+      void readFileAsDataUrl(file).then(async (result) => {
         step.mediaFileData = result.data;
         step.mediaMimeType = result.mimeType;
-        step.fileName = result.fileName;
-        updateStepFileLabel(stepElement, result.fileName);
+        step.fileName = step.fileName ?? result.fileName;
+        updateStepFileLabel(stepElement, step.fileName);
+
+        if (["audio", "ptt", "video"].includes(step.type)) {
+          const kind = step.type === "video" ? "video" : "audio";
+          const duration = await estimateMediaDuration(result.data, kind);
+          step.mediaDurationSec = duration || undefined;
+          updateStepDurationHint(stepElement, step, step.mediaDurationMode ?? DEFAULT_MEDIA_DURATION_MODE);
+        }
       });
       return;
     }

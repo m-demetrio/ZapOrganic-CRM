@@ -71,6 +71,103 @@ const logError = (...args: unknown[]) => console.error(LOG_PREFIX, ...args);
 const createRunId = () => `zop-funnel-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 const createRequestId = () => `zop-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 
+const dispatchBridgeRequest = async <T>(
+  detail: Record<string, unknown>,
+  timeoutMs = 15000
+): Promise<T | null> => {
+  if (typeof window === "undefined") {
+    return null;
+  }
+
+  const id = createRequestId();
+
+  return await new Promise<T | null>((resolve) => {
+    let timeoutId = 0;
+    const handler = (event: Event) => {
+      const responseDetail = (event as CustomEvent<{ id: string; payload?: T }>).detail;
+      if (!responseDetail || responseDetail.id !== id) {
+        return;
+      }
+
+      window.clearTimeout(timeoutId);
+      window.removeEventListener(RESPONSE_EVENT, handler);
+      resolve(responseDetail.payload ?? null);
+    };
+
+    window.addEventListener(RESPONSE_EVENT, handler);
+    window.dispatchEvent(
+      new CustomEvent(REQUEST_EVENT, {
+        detail: {
+          ...detail,
+          id
+        }
+      })
+    );
+
+    timeoutId = window.setTimeout(() => {
+      window.removeEventListener(RESPONSE_EVENT, handler);
+      resolve(null);
+    }, timeoutMs);
+  });
+};
+
+const sendMessageViaPageBridge = (
+  chatId: string,
+  text: string,
+  options?: Record<string, unknown>
+): Promise<SendMessageResult | null> =>
+  dispatchBridgeRequest<SendMessageResult>({ type: "send-text", chatId, text, options });
+
+const markChatPresence = (chatId: string, type: "mark-composing" | "mark-recording", value: boolean) => {
+  void dispatchBridgeRequest({ type, chatId, value }).catch(() => {});
+};
+
+const dataUrlToBlob = (dataUrl: string, overrideMime?: string) => {
+  const [meta, encoded] = dataUrl.split(",");
+  const match = meta.match(/data:(.*?);base64/);
+  const mimeType = overrideMime ?? match?.[1] ?? "application/octet-stream";
+  const byteString = atob(encoded);
+  const arrayBuffer = new Uint8Array(byteString.length);
+  for (let index = 0; index < byteString.length; index += 1) {
+    arrayBuffer[index] = byteString.charCodeAt(index);
+  }
+  return new Blob([arrayBuffer], { type: mimeType });
+};
+
+const getFileNameFromUrl = (url: string) => {
+  try {
+    const parsed = new URL(url);
+    const segment = parsed.pathname.split("/").filter(Boolean).pop();
+    return segment;
+  } catch {
+    return undefined;
+  }
+};
+
+const resolveMediaBlob = async (step: FunnelStep) => {
+  if (step.mediaSource === "file" && step.mediaFileData) {
+    const blob = dataUrlToBlob(step.mediaFileData, step.mediaMimeType);
+    return {
+      file: blob,
+      filename: step.fileName || "arquivo"
+    };
+  }
+
+  if (step.mediaUrl) {
+    const response = await fetch(step.mediaUrl);
+    if (!response.ok) {
+      throw new Error("media-fetch-failed");
+    }
+    const blob = await response.blob();
+    return {
+      file: blob,
+      filename: step.fileName || getFileNameFromUrl(step.mediaUrl) || "arquivo"
+    };
+  }
+
+  return null;
+};
+
 const addListener = <T>(set: Set<Listener<T>>, listener: Listener<T>) => {
   set.add(listener);
   return () => set.delete(listener);
@@ -152,51 +249,6 @@ const waitWithCancel = async (runId: string, delayMs: number) => {
   });
 };
 
-const sendMessageViaPageBridge = async (
-  chatId: string,
-  text: string,
-  options?: Record<string, unknown>
-): Promise<SendMessageResult> => {
-  if (typeof window === "undefined") {
-    return { ok: false, error: "window-unavailable" };
-  }
-
-  const id = createRequestId();
-
-  return await new Promise<SendMessageResult>((resolve) => {
-    let timeoutId = 0;
-    const handler = (event: Event) => {
-      const detail = (event as CustomEvent<{ id: string; payload?: SendMessageResult }>).detail;
-      if (!detail || detail.id !== id) {
-        return;
-      }
-
-      window.clearTimeout(timeoutId);
-      window.removeEventListener(RESPONSE_EVENT, handler);
-      resolve(detail.payload ?? { ok: false, error: "empty-response" });
-    };
-
-    timeoutId = window.setTimeout(() => {
-      window.removeEventListener(RESPONSE_EVENT, handler);
-      resolve({ ok: false, error: "timeout" });
-    }, 15000);
-
-    window.addEventListener(RESPONSE_EVENT, handler);
-    window.dispatchEvent(
-      new CustomEvent(REQUEST_EVENT, {
-        detail: {
-          id,
-          type: "send-text",
-          chatId,
-          text,
-          options
-        }
-      })
-    );
-
-  });
-};
-
 const resolvePayloadTemplate = (payloadTemplate?: Record<string, unknown>) => {
   if (!payloadTemplate) {
     return null;
@@ -225,6 +277,80 @@ const emitStepEvent = (
   ts: Date.now()
 });
 
+const sampleRandomDelaySec = () => Math.floor(Math.random() * 6) + 5;
+
+const resolveStepDelaySec = (
+  step: FunnelStep,
+  integrationDefault: number,
+  isSending = false
+) => {
+  const hasManualDelay = typeof step.delaySec === "number" || Boolean(step.delayExpr);
+  if (hasManualDelay) {
+    return resolveDelaySec(step, integrationDefault);
+  }
+
+  if (
+    isSending &&
+    step.mediaDurationMode === "file" &&
+    typeof step.mediaDurationSec === "number" &&
+    step.mediaDurationSec > 0
+  ) {
+    return step.mediaDurationSec;
+  }
+
+  if (integrationDefault && integrationDefault > 0) {
+    return integrationDefault;
+  }
+
+  if (isSending) {
+    return sampleRandomDelaySec();
+  }
+
+  return undefined;
+};
+
+const isSendingType = (type: FunnelStep["type"]) =>
+  type === "text" || type === "audio" || type === "ptt" || type === "image" || type === "video" || type === "file";
+
+const isRecordingType = (type: FunnelStep["type"]) => type === "audio" || type === "ptt" || type === "video";
+
+const getPresenceTypeForStep = (
+  step: FunnelStep
+): "mark-composing" | "mark-recording" | null => {
+  if (step.type === "text") {
+    return "mark-composing";
+  }
+
+  if (isRecordingType(step.type)) {
+    return "mark-recording";
+  }
+
+  return null;
+};
+
+const sendMediaStep = async (chatId: string, step: FunnelStep) => {
+  const media = await resolveMediaBlob(step);
+  if (!media) {
+    warn("Skipping media step without source", step.id);
+    return false;
+  }
+
+  const caption = step.mediaCaption?.trim() || undefined;
+  const result = await dispatchBridgeRequest<SendMessageResult>({
+    type: "send-file",
+    chatId,
+    file: media.file,
+    filename: media.filename,
+    caption
+  });
+
+  if (!result?.ok) {
+    throw new Error(result?.error || "send-file-failed");
+  }
+
+  return true;
+};
+
 const runFunnelSequence = async (runId: string, input: FunnelRunInput) => {
   const { funnel, chatId, integrationSettings } = input;
   const state = runs.get(runId);
@@ -244,28 +370,18 @@ const runFunnelSequence = async (runId: string, input: FunnelRunInput) => {
 
     const step = funnel.steps[index];
     const message = step.type === "text" ? step.text?.trim() ?? "" : "";
-    const shouldResolveDelay = step.type === "delay" || (step.type === "text" && message);
-    const resolvedDelaySec = shouldResolveDelay ? resolveDelaySec(step, defaultDelaySec) : undefined;
+    const isSending = isSendingType(step.type);
+    const resolvedDelaySec = resolveStepDelaySec(step, defaultDelaySec, isSending);
+    const delayMs =
+      typeof resolvedDelaySec === "number" && resolvedDelaySec > 0 ? resolvedDelaySec * 1000 : 0;
     const stepPayload = emitStepEvent(runId, funnel.id, chatId, step, index, currentLead, resolvedDelaySec);
     emitEvent(listeners.stepStart, stepPayload);
 
     try {
-      if (step.type === "text") {
-        if (!message) {
-          warn("Skipping text step with empty message", step.id);
-        } else {
-          await waitWithCancel(runId, (resolvedDelaySec ?? 0) * 1000);
-          if (state.cancelled) {
-            break;
-          }
-
-          const result = await sendMessageViaPageBridge(chatId, message);
-          if (!result.ok) {
-            throw new Error(result.error || "send-message-failed");
-          }
+      if (step.type === "delay") {
+        if (delayMs > 0) {
+          await waitWithCancel(runId, delayMs);
         }
-      } else if (step.type === "delay") {
-        await waitWithCancel(runId, (resolvedDelaySec ?? 0) * 1000);
       } else if (step.type === "tag") {
         const tagsToAdd = step.addTags ?? [];
         if (tagsToAdd.length === 0) {
@@ -303,6 +419,56 @@ const runFunnelSequence = async (runId: string, input: FunnelRunInput) => {
           if (!response.ok) {
             throw new Error(`webhook-failed-${response.status}`);
           }
+        }
+      } else if (isSending) {
+        const presenceType = getPresenceTypeForStep(step);
+        let presenceActive = false;
+
+        const activatePresence = () => {
+          if (!presenceType || presenceActive) {
+            return;
+          }
+          presenceActive = true;
+          markChatPresence(chatId, presenceType, true);
+        };
+
+        const deactivatePresence = () => {
+          if (!presenceType || !presenceActive) {
+            return;
+          }
+          presenceActive = false;
+          markChatPresence(chatId, presenceType, false);
+        };
+
+        const shouldUsePresence = Boolean(presenceType) && (step.type !== "text" || Boolean(message));
+
+        try {
+          if (shouldUsePresence) {
+            activatePresence();
+          }
+
+          if (delayMs > 0) {
+            await waitWithCancel(runId, delayMs);
+          }
+
+          if (state.cancelled) {
+            break;
+          }
+
+          if (step.type === "text") {
+            if (!message) {
+              warn("Skipping text step with empty message", step.id);
+            } else {
+              const result = await sendMessageViaPageBridge(chatId, message);
+              if (!result?.ok) {
+                throw new Error(result?.error || "send-message-failed");
+              }
+            }
+          } else {
+            await sendMediaStep(chatId, step);
+          }
+        } finally {
+          deactivatePresence();
         }
       } else {
         warn("Unknown step type", step.type);

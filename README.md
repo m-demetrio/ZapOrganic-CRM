@@ -45,13 +45,14 @@ pnpm lint
 3. Clique em Load unpacked.
 4. Selecione a pasta `dist/`.
 
-## Opções
+## Opcoes
 
-1. Abra a engrenagem na sidebar ou use `chrome://extensions` → Detalhes → Página de opções (o mesmo painel também está disponível em `dashboard/dashboard.html` para quem prefere o layout estilo ZapVoice).
-2. Na aba **Funis** organize etapas com drag & drop, delays, payloads JSON e mídias configuradas por URL ou upload (áudio, PTT, imagem, vídeo e arquivos com legenda).
-3. Em **Respostas rápidas** reutilize mensagens com áudio, imagem, vídeo ou arquivos (PDF, DOCX, XLSX) e defina etiquetas do WhatsApp Business; escolha origem (URL ou arquivo) e mantenha o nome/legenda no storage.
-4. Use **Integrações** para configurar webhook/secret do n8n e **Backups** para exportar ou restaurar o JSON completo.
-5. Clique em *Salvar* para gravar tudo no storage; a extensão detecta a alteração e atualiza automaticamente a interface.
+1. Abra a engrenagem na sidebar ou use `chrome://extensions` -> Detalhes -> Pagina de opcoes (o mesmo painel tambem esta disponivel em `options/options.html` e em `dashboard/dashboard.html` para quem prefere o layout estilo ZapVoice).
+2. Na aba **Funis** monte etapas de texto, delay, tag, webhook ou midia com drag & drop. Delays aceitam segundos, expressoes (`rand(5,10)`, `8..12`) ou o valor manual; quando nada for configurado o tempo aleatorio padrao de 5 a 10 segundos e usado e pode ser substituido pelo tempo do arquivo para audio e video.
+3. Em **Respostas rapidas** organize categoria, titulo, mensagem e variaveis, e anexe audio, PTT, imagem, video ou arquivos (PDF, DOCX, XLSX) por URL ou upload, com legenda opcional, nome exibido e etiquetas do WhatsApp Business; os dados ficam persistidos pelo storage.
+4. Em **Integracoes** habilite o webhook do n8n, defina a URL/secret e o delay padrao usado em todos os envios; a mesma aba exporta o status do webhook.
+5. Em **Backups** exporte o JSON com funis, respostas e configuracoes ou importe um arquivo compativel para restaurar os dados.
+6. Clique em **Salvar** em qualquer aba para gravar no storage.ts; a interface e os runners detectam a alteracao e aplicam a nova configuracao sem precisar recarregar.
 
 ## Validacao rapida
 
