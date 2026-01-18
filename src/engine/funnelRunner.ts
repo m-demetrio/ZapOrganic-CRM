@@ -136,19 +136,101 @@ const getMimeFromDataUrl = (dataUrl: string) => {
 };
 
 const requestMediaFromExtension = async (id: string) => {
-  if (!chrome?.runtime?.sendMessage) {
+  if (!chrome?.runtime?.connect) {
     return null;
   }
 
-  try {
-    const response = await chrome.runtime.sendMessage({ type: "zop:media:get", id });
-    if (!response?.ok) {
-      return null;
+  return await new Promise<{
+    id: string;
+    dataUrl: string;
+    mimeType?: string;
+    fileName?: string;
+  } | null>((resolve) => {
+    let completed = false;
+    let totalChunks = 0;
+    const chunks: string[] = [];
+    let meta: { id: string; mimeType?: string; fileName?: string } | null = null;
+
+    const port = chrome.runtime.connect({ name: "zop:media:stream" });
+
+    const finish = (record: { id: string; dataUrl: string; mimeType?: string; fileName?: string } | null) => {
+      if (completed) {
+        return;
+      }
+      completed = true;
+      try {
+        port.disconnect();
+      } catch {
+        // ignore
+      }
+      resolve(record);
+    };
+
+    port.onMessage.addListener((message) => {
+      if (!message || typeof message !== "object") {
+        return;
+      }
+
+      if (message.type === "error") {
+        finish(null);
+        return;
+      }
+
+      if (message.type === "meta") {
+        meta = {
+          id: message.id,
+          mimeType: message.mimeType,
+          fileName: message.fileName
+        };
+        totalChunks = Number(message.totalChunks) || 0;
+        if (totalChunks === 0) {
+          finish(null);
+        }
+        return;
+      }
+
+      if (message.type === "chunk") {
+        chunks[message.index] = message.data;
+        return;
+      }
+
+      if (message.type === "done") {
+        if (!meta || chunks.length < totalChunks) {
+          finish(null);
+          return;
+        }
+        finish({
+          id: meta.id,
+          dataUrl: chunks.join(""),
+          mimeType: meta.mimeType,
+          fileName: meta.fileName
+        });
+      }
+    });
+
+    port.postMessage({ type: "zop:media:stream", id });
+  });
+};
+
+const retryRequestMedia = async (id: string, attempts = 2, delayMs = 200) => {
+  let lastResult: {
+    id: string;
+    dataUrl: string;
+    mimeType?: string;
+    fileName?: string;
+  } | null = null;
+
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    lastResult = await requestMediaFromExtension(id);
+    if (lastResult?.dataUrl) {
+      return lastResult;
     }
-    return response.record ?? null;
-  } catch {
-    return null;
+    if (attempt < attempts - 1) {
+      await new Promise((resolve) => setTimeout(resolve, delayMs));
+    }
   }
+
+  return lastResult;
 };
 
 const resolveMediaPayload = async (step: FunnelStep) => {
@@ -163,8 +245,9 @@ const resolveMediaPayload = async (step: FunnelStep) => {
     }
 
     if (step.mediaId) {
-      const stored = (await requestMediaFromExtension(step.mediaId)) ?? (await getMedia(step.mediaId));
+      const stored = (await retryRequestMedia(step.mediaId)) ?? (await getMedia(step.mediaId));
       if (!stored?.dataUrl) {
+        warn("Media not found for step", step.id, step.mediaId);
         return null;
       }
       return {
@@ -322,7 +405,7 @@ const resolveStepDelaySec = (
 const isSendingType = (type: FunnelStep["type"]) =>
   type === "text" || type === "audio" || type === "ptt" || type === "image" || type === "video" || type === "file";
 
-const isRecordingType = (type: FunnelStep["type"]) => type === "audio" || type === "ptt" || type === "video";
+const isRecordingType = (type: FunnelStep["type"]) => type === "ptt";
 
 const getPresenceTypeForStep = (
   step: FunnelStep
@@ -340,13 +423,10 @@ const getPresenceTypeForStep = (
 
 const resolveMediaType = (stepType: FunnelStep["type"]) => {
   switch (stepType) {
-    case "audio":
     case "ptt":
       return "audio";
     case "image":
       return "image";
-    case "video":
-      return "video";
     case "file":
       return "document";
     default:
@@ -357,10 +437,11 @@ const resolveMediaType = (stepType: FunnelStep["type"]) => {
 const buildSendFileOptions = (
   step: FunnelStep,
   media: { filename: string; mimeType?: string },
-  caption?: string
+  caption?: string,
+  overrideType?: string
 ) => {
   const options: Record<string, unknown> = {
-    type: resolveMediaType(step.type)
+    type: overrideType ?? resolveMediaType(step.type)
   };
 
   if (media.filename) {
@@ -390,12 +471,23 @@ const sendMediaStep = async (chatId: string, step: FunnelStep) => {
   }
 
   const caption = step.mediaCaption?.trim() || undefined;
-  const result = await dispatchBridgeRequest<SendMessageResult>({
-    type: "send-file",
-    chatId,
-    file: media.file,
-    options: buildSendFileOptions(step, media, caption)
-  });
+  const sendFile = (options: Record<string, unknown>) =>
+    dispatchBridgeRequest<SendMessageResult>({
+      type: "send-file",
+      chatId,
+      file: media.file,
+      options
+    });
+
+  const primaryOptions = buildSendFileOptions(step, media, caption);
+  const result = await sendFile(primaryOptions);
+  if (!result?.ok && step.type === "video") {
+    const fallback = await sendFile(buildSendFileOptions(step, media, caption, "video"));
+    if (!fallback?.ok) {
+      throw new Error(fallback?.error || "send-file-failed");
+    }
+    return true;
+  }
 
   if (!result?.ok) {
     throw new Error(result?.error || "send-file-failed");

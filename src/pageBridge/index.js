@@ -61,23 +61,38 @@ const serializeChat = (chat) => {
   };
 };
 
+const isWppReady = () => {
+  const wpp = window.WPP;
+  if (!wpp) {
+    return false;
+  }
+  if (wpp.isReady || wpp.isFullReady) {
+    return true;
+  }
+  return Boolean(wpp.chat);
+};
+
 const getActiveChat = () => {
   const wpp = window.WPP;
   if (!wpp || !wpp.chat) {
     return null;
   }
 
-  if (typeof wpp.chat.getActiveChat === "function") {
-    return wpp.chat.getActiveChat();
-  }
-
-  if (typeof wpp.chat.getActiveChatId === "function" && typeof wpp.chat.getChat === "function") {
-    const activeId = wpp.chat.getActiveChatId();
-    if (activeId && typeof activeId.then === "function") {
-      return activeId.then((resolvedId) => (resolvedId ? wpp.chat.getChat(resolvedId) : null));
+  try {
+    if (typeof wpp.chat.getActiveChat === "function") {
+      return wpp.chat.getActiveChat();
     }
 
-    return activeId ? wpp.chat.getChat(activeId) : null;
+    if (typeof wpp.chat.getActiveChatId === "function" && typeof wpp.chat.getChat === "function") {
+      const activeId = wpp.chat.getActiveChatId();
+      if (activeId && typeof activeId.then === "function") {
+        return activeId.then((resolvedId) => (resolvedId ? wpp.chat.getChat(resolvedId) : null));
+      }
+
+      return activeId ? wpp.chat.getChat(activeId) : null;
+    }
+  } catch {
+    return null;
   }
 
   return null;
@@ -89,7 +104,11 @@ const getChatById = (chatId) => {
     return null;
   }
 
-  return wpp.chat.getChat(chatId);
+  try {
+    return wpp.chat.getChat(chatId);
+  } catch {
+    return null;
+  }
 };
 
 const handleRequest = (event) => {
@@ -99,6 +118,10 @@ const handleRequest = (event) => {
   }
 
   if (detail.type === "active-chat") {
+    if (!isWppReady()) {
+      emitResponse(detail.id, null);
+      return;
+    }
     const result = getActiveChat();
     resolveMaybePromise(result, (chat) => {
       emitResponse(detail.id, serializeChat(chat));
@@ -107,6 +130,10 @@ const handleRequest = (event) => {
   }
 
   if (detail.type === "get-chat") {
+    if (!isWppReady()) {
+      emitResponse(detail.id, null);
+      return;
+    }
     const chatId = getDetailValue(detail, "chatId");
     if (!chatId) {
       emitResponse(detail.id, null);
@@ -223,6 +250,26 @@ const handleRequest = (event) => {
       return;
     }
 
+    const normalizeFile = (value) => {
+      if (typeof value !== "string" || !value.startsWith("data:")) {
+        return value;
+      }
+
+      try {
+        const [meta, encoded] = value.split(",");
+        const match = meta.match(/data:(.*?);base64/);
+        const mimeType = match?.[1] ?? "application/octet-stream";
+        const byteString = atob(encoded);
+        const arrayBuffer = new Uint8Array(byteString.length);
+        for (let index = 0; index < byteString.length; index += 1) {
+          arrayBuffer[index] = byteString.charCodeAt(index);
+        }
+        return new Blob([arrayBuffer], { type: mimeType });
+      } catch {
+        return value;
+      }
+    };
+
     const normalizedOptions =
       options && typeof options === "object" ? { ...options } : {};
     if (filename && !normalizedOptions.filename) {
@@ -232,7 +279,9 @@ const handleRequest = (event) => {
       normalizedOptions.caption = caption;
     }
 
-    Promise.resolve(wpp.chat.sendFileMessage(chatId, file, normalizedOptions))
+    const payloadFile = normalizeFile(file);
+
+    Promise.resolve(wpp.chat.sendFileMessage(chatId, payloadFile, normalizedOptions))
       .then((result) => emitResponse(detail.id, { ok: true, result }))
       .catch((error) => {
         emitResponse(detail.id, { ok: false, error: error?.message || String(error) });
