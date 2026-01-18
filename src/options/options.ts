@@ -18,7 +18,7 @@ const DEFAULT_INTEGRATION_SETTINGS: IntegrationSettings = {
   defaultDelaySec: 0
 };
 
-const MEDIA_STEP_TYPES = new Set<FunnelStep["type"]>(["audio", "ptt", "image", "video", "file"]);
+const MEDIA_STEP_TYPES = new Set<FunnelStep["type"]>(["audio", "ptt", "ptv", "image", "video", "file"]);
 const DEFAULT_MEDIA_SOURCE: MediaSource = "file";
 const MEDIA_FILE_ACCEPT =
   "audio/*,video/*,image/*,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
@@ -149,6 +149,8 @@ const formatMediaTypeLabel = (type?: QuickReply["mediaType"]) => {
       return "Audio";
     case "ptt":
       return "PTT";
+    case "ptv":
+      return "PTV";
     case "image":
       return "Imagem";
     case "video":
@@ -496,6 +498,7 @@ const init = async () => {
               <option value="text">Texto</option>
               <option value="audio">Audio</option>
               <option value="ptt">PTT (gravado)</option>
+              <option value="ptv">PTV (video recado)</option>
               <option value="image">Imagem</option>
               <option value="video">Video</option>
               <option value="file">Arquivo</option>
@@ -1220,8 +1223,8 @@ const init = async () => {
           step.fileName = step.fileName ?? result.fileName;
           updateStepFileLabel(stepElement, step.fileName);
 
-          if (["audio", "ptt", "video"].includes(step.type)) {
-            const kind = step.type === "video" ? "video" : "audio";
+          if (["audio", "ptt", "ptv", "video"].includes(step.type)) {
+            const kind = step.type === "video" || step.type === "ptv" ? "video" : "audio";
             const duration = await estimateMediaDuration(result.data, kind);
             step.mediaDurationSec = duration || undefined;
             updateStepDurationHint(stepElement, step, step.mediaDurationMode ?? DEFAULT_MEDIA_DURATION_MODE);

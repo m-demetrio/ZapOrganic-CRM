@@ -4,7 +4,7 @@ export type MediaDurationMode = "manual" | "file";
 
 export type FunnelStep = {
   id: string;
-  type: "text" | "delay" | "tag" | "webhook" | "audio" | "ptt" | "image" | "video" | "file";
+  type: "text" | "delay" | "tag" | "webhook" | "audio" | "ptt" | "ptv" | "image" | "video" | "file";
   text?: string;
   delaySec?: number;
   delayExpr?: string;
@@ -45,7 +45,7 @@ export type IntegrationSettings = {
   defaultDelaySec?: number;
 };
 
-export type QuickReplyMediaType = "text" | "audio" | "ptt" | "image" | "video" | "file";
+export type QuickReplyMediaType = "text" | "audio" | "ptt" | "ptv" | "image" | "video" | "file";
 
 export type QuickReply = {
   id: string;

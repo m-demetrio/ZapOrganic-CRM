@@ -327,6 +327,8 @@ export const mountSidebar = () => {
         return "Etiqueta";
       case "webhook":
         return "Webhook";
+      case "ptv":
+        return "Video recado";
       default:
         return "Etapa";
     }

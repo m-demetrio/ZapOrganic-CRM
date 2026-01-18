@@ -385,6 +385,7 @@ select {
 
 .step[data-step-type="audio"] .media-duration,
 .step[data-step-type="ptt"] .media-duration,
+.step[data-step-type="ptv"] .media-duration,
 .step[data-step-type="video"] .media-duration {
   display: flex;
 }
@@ -624,6 +625,7 @@ select {
 .step[data-step-type="audio"] .step__group[data-group="media"],
 .step[data-step-type="ptt"] .step__group[data-group="media"],
 .step[data-step-type="image"] .step__group[data-group="media"],
+.step[data-step-type="ptv"] .step__group[data-group="media"],
 .step[data-step-type="video"] .step__group[data-group="media"],
 .step[data-step-type="file"] .step__group[data-group="media"] {
   display: grid;

@@ -403,7 +403,13 @@ const resolveStepDelaySec = (
 };
 
 const isSendingType = (type: FunnelStep["type"]) =>
-  type === "text" || type === "audio" || type === "ptt" || type === "image" || type === "video" || type === "file";
+  type === "text" ||
+  type === "audio" ||
+  type === "ptt" ||
+  type === "ptv" ||
+  type === "image" ||
+  type === "video" ||
+  type === "file";
 
 const isRecordingType = (type: FunnelStep["type"]) => type === "ptt";
 
@@ -423,10 +429,16 @@ const getPresenceTypeForStep = (
 
 const resolveMediaType = (stepType: FunnelStep["type"]) => {
   switch (stepType) {
+    case "audio":
+      return "audio";
     case "ptt":
       return "audio";
+    case "ptv":
+      return "video";
     case "image":
       return "image";
+    case "video":
+      return "video";
     case "file":
       return "document";
     default:
@@ -458,6 +470,9 @@ const buildSendFileOptions = (
 
   if (step.type === "ptt") {
     options.isPtt = true;
+  }
+  if (step.type === "ptv") {
+    options.isPtv = true;
   }
 
   return options;
