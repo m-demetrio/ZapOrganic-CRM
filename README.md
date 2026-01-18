@@ -62,6 +62,19 @@ pnpm lint
 |- pageBridge/  # WPP/wa-js no contexto da pagina
 ```
 
+## Dados e schema
+
+As estruturas principais ficam em `src/shared/schema.ts`:
+
+- `QuickReply`: mensagens rapidas com categoria, variaveis e timestamps.
+- `FunnelStep`: etapa do funil com suporte a texto, delay, tags e webhook.
+- `Funnel`: conjunto de etapas com nome e descricao.
+- `LeadCard`: lead do kanban com laneId, tags, notas e ultima atualizacao.
+- `IntegrationSettings`: configuracoes do webhook (n8n) e delays padrao.
+
+Persistencia fica em `src/shared/storage.ts` usando `chrome.storage.local` (com fallback para `localStorage`).
+Existe `schemaVersion` para migracoes futuras e os dados serao exportaveis/importaveis em uma proxima etapa.
+
 ## WPP local
 
 O arquivo `public/wppconnect-wa.js` e copiado de `node_modules/@wppconnect/wa-js/dist/wppconnect-wa.js`.
