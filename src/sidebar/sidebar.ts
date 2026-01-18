@@ -162,19 +162,12 @@ const setupPanelNavigation = (shadow: ShadowRoot) => {
     panels.forEach((panel) => panel.classList.toggle("is-active", panel.dataset.panel === panelId));
   };
 
-  railItems.forEach((item) => {
-    item.addEventListener("click", () => {
-      const panelId = item.dataset.panel;
-      if (panelId) {
-        setActivePanel(panelId);
-      }
-    });
-  });
-
   const current = railItems.find((item) => item.classList.contains("is-active"));
   if (current?.dataset.panel) {
     setActivePanel(current.dataset.panel);
   }
+
+  return { railItems, setActivePanel };
 };
 
 const setupChipGroup = (shadow: ShadowRoot, selector: string) => {
@@ -211,10 +204,13 @@ export const mountSidebar = () => {
 
   const hostStyles = getComputedStyle(host);
   const sidebarWidth = parseCssPx(hostStyles.getPropertyValue("--zop-sidebar-width")) ?? 420;
-  const handleWidth = parseCssPx(hostStyles.getPropertyValue("--zop-handle-width")) ?? 56;
-  const layout: LayoutConfig = {
+  const collapsedWidth =
+    parseCssPx(hostStyles.getPropertyValue("--zop-collapsed-width")) ??
+    parseCssPx(hostStyles.getPropertyValue("--zop-rail-width")) ??
+    96;
+  let layout: LayoutConfig = {
     openOffset: sidebarWidth,
-    collapsedOffset: handleWidth + 16
+    collapsedOffset: collapsedWidth
   };
 
   const logo = shadow.querySelector<HTMLImageElement>("#zop-logo");
@@ -222,7 +218,7 @@ export const mountSidebar = () => {
     logo.src = chrome.runtime.getURL("logo-zaporganic.png");
   }
 
-  let collapsed = false;
+  let collapsed = true;
   setCollapsed(shell, collapsed, layout);
 
   toggle.addEventListener("click", () => {
@@ -240,7 +236,31 @@ export const mountSidebar = () => {
     setCollapsed(shell, collapsed, layout);
   });
 
-  setupPanelNavigation(shadow);
+  const { railItems, setActivePanel } = setupPanelNavigation(shadow);
+  railItems.forEach((item) => {
+    item.addEventListener("click", () => {
+      const panelId = item.dataset.panel;
+      if (!panelId) {
+        return;
+      }
+
+      if (collapsed) {
+        setActivePanel(panelId);
+        collapsed = false;
+        setCollapsed(shell, collapsed, layout);
+        return;
+      }
+
+      const isSamePanel = item.classList.contains("is-active");
+      if (isSamePanel) {
+        collapsed = true;
+        setCollapsed(shell, collapsed, layout);
+        return;
+      }
+
+      setActivePanel(panelId);
+    });
+  });
   setupChipGroup(shadow, ".zop-chip");
   setupChipGroup(shadow, ".zop-pill-group .zop-pill");
 
