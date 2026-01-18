@@ -213,17 +213,21 @@ export const mountSidebar = () => {
     logoRail.src = chrome.runtime.getURL("logo-zaporganic.png");
   }
 
-  const openOptions = shadow.querySelector<HTMLButtonElement>("#zop-open-options");
-  openOptions?.addEventListener("click", () => {
+  const openOptionsButton = shadow.querySelector<HTMLButtonElement>("#zop-open-options");
+  const openOptionsHandler = () => {
     if (chrome?.runtime?.openOptionsPage) {
       chrome.runtime.openOptionsPage();
       return;
     }
-
     if (chrome?.runtime?.getURL) {
       window.open(chrome.runtime.getURL("options/options.html"), "_blank");
     }
-  });
+  };
+
+  openOptionsButton?.addEventListener("click", openOptionsHandler);
+
+  const openOptionsFunnelButton = shadow.querySelector<HTMLButtonElement>("[data-action='open-options']");
+  openOptionsFunnelButton?.addEventListener("click", openOptionsHandler);
 
   let collapsed = true;
   setCollapsed(shell, collapsed, layout);

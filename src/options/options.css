@@ -107,6 +107,15 @@ select {
   align-items: center;
 }
 
+.hero__tagline {
+  text-align: center;
+  margin: 8px auto 0;
+  font-size: 14px;
+  color: var(--muted);
+  max-width: 960px;
+  letter-spacing: 0.2px;
+}
+
 .status-pill {
   padding: 6px 12px;
   border-radius: 999px;
@@ -216,6 +225,12 @@ select {
   font-size: 13px;
 }
 
+.panel__note {
+  margin: 0 0 14px;
+  font-size: 13px;
+  color: rgba(28, 42, 47, 0.7);
+}
+
 .grid {
   display: grid;
   gap: 20px;
@@ -272,6 +287,55 @@ select {
   gap: 14px;
 }
 
+.quickreply__hint {
+  margin: -6px 0 0;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.quickreply-media {
+  display: none;
+  flex-direction: column;
+  gap: 8px;
+  padding: 16px;
+  border-radius: 16px;
+  border: 1px dashed rgba(15, 118, 110, 0.4);
+  background: rgba(15, 118, 110, 0.06);
+}
+
+.quickreply-media.is-active {
+  display: flex;
+}
+
+.quickreply-media__field {
+  margin: 0;
+}
+
+.quickreply-media__field--file input[type="file"] {
+  cursor: pointer;
+  padding: 8px 6px;
+}
+
+.quickreply-media__hint {
+  margin: 0;
+  font-size: 12px;
+}
+
+.quickreply-media[data-source="file"] .quickreply-media__field--url {
+  display: none;
+}
+
+.quickreply-media[data-source="url"] .quickreply-media__field--file {
+  display: none;
+}
+
+.media__file-label {
+  display: block;
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
 .field {
   display: grid;
   gap: 8px;
@@ -282,6 +346,21 @@ select {
   display: grid;
   gap: 10px;
   grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.media__toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.media__field {
+  margin: 0;
+}
+
+.media__field input[type="file"] {
+  cursor: pointer;
 }
 
 .input {
@@ -467,6 +546,35 @@ select {
   color: var(--accent-strong);
 }
 
+.step__drag-handle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 12px;
+  border: 1px dashed rgba(15, 118, 110, 0.5);
+  margin-left: 6px;
+  cursor: grab;
+  color: var(--muted);
+  font-size: 14px;
+  user-select: none;
+}
+
+.step.is-dragging {
+  opacity: 0.85;
+  box-shadow: 0 18px 30px rgba(15, 23, 42, 0.25);
+}
+
+.step--drop-target {
+  border-color: rgba(15, 118, 110, 0.8);
+  box-shadow: 0 0 0 3px rgba(15, 118, 110, 0.12);
+}
+
+.step__actions .icon-button {
+  min-width: 40px;
+}
+
 .step__group {
   display: none;
 }
@@ -475,7 +583,12 @@ select {
 .step[data-step-type="text"] .step__group[data-group="delay"],
 .step[data-step-type="delay"] .step__group[data-group="delay"],
 .step[data-step-type="tag"] .step__group[data-group="tag"],
-.step[data-step-type="webhook"] .step__group[data-group="webhook"] {
+.step[data-step-type="webhook"] .step__group[data-group="webhook"],
+.step[data-step-type="audio"] .step__group[data-group="media"],
+.step[data-step-type="ptt"] .step__group[data-group="media"],
+.step[data-step-type="image"] .step__group[data-group="media"],
+.step[data-step-type="video"] .step__group[data-group="media"],
+.step[data-step-type="file"] .step__group[data-group="media"] {
   display: grid;
   gap: 10px;
 }

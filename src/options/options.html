@@ -12,6 +12,9 @@
       <span class="status-pill status-pill--ghost">MVP 0.2</span>
     </div>
   </header>
+  <p class="hero__tagline">
+    Organize funis, respostas e integrações com drag & drop, uploads de áudio, imagem, vídeo e arquivos do WhatsApp Business.
+  </p>
 
   <div class="layout">
     <nav class="tabs" aria-label="Secoes">
@@ -30,6 +33,9 @@
           </div>
           <button class="button" id="zop-new-funnel" type="button">Novo funil</button>
         </div>
+        <p class="panel__note">
+          Arraste as etapas ou use os botões Up/Down para organizar o fluxo. Os uploads e URLs ficam salvos no storage.
+        </p>
 
         <div class="grid grid--two">
           <div class="card">
@@ -102,6 +108,9 @@
           </div>
           <button class="button" id="zop-new-quickreply" type="button">Nova resposta</button>
         </div>
+        <p class="panel__note">
+          Audio PTT, imagens, vídeos e arquivos (PDF, DOCX, XLSX) podem ser enviados com legenda e etiquetas do WhatsApp Business.
+        </p>
         <div class="grid grid--two">
           <div class="card">
             <div class="card__header">
@@ -146,6 +155,18 @@
                 <input class="input" id="zop-quickreply-title" type="text" placeholder="Ex: Primeiro contato" />
               </label>
               <label class="field">
+                <span>Tipo</span>
+                <select class="input" id="zop-quickreply-type">
+                  <option value="text">Texto</option>
+                  <option value="audio">Audio</option>
+                  <option value="ptt">PTT (gravado)</option>
+                  <option value="image">Imagem</option>
+                  <option value="video">Video</option>
+                  <option value="file">Arquivo</option>
+                </select>
+              </label>
+              <p class="quickreply__hint">Escolha o tipo e configure a origem do áudio, imagem, vídeo ou arquivo.</p>
+              <label class="field">
                 <span>Mensagem</span>
                 <textarea
                   class="input input--area"
@@ -157,6 +178,51 @@
               <label class="field">
                 <span>Variaveis (separe por virgula)</span>
                 <input class="input" id="zop-quickreply-variables" type="text" placeholder="Ex: nome, empresa" />
+              </label>
+
+              <div class="quickreply-media" id="zop-quickreply-media">
+                <div class="field-grid">
+                  <label class="field field--small">
+                    <span>Origem</span>
+                    <select class="input input--small" id="zop-quickreply-media-source">
+                      <option value="url">URL / Link</option>
+                      <option value="file">Arquivo</option>
+                    </select>
+                  </label>
+                  <label class="field quickreply-media__field quickreply-media__field--url">
+                    <span>URL direta</span>
+                    <input class="input" id="zop-quickreply-media-url" type="text" placeholder="https://..." />
+                  </label>
+                  <label class="field quickreply-media__field quickreply-media__field--file">
+                    <span>Upload (mp3, mp4, png, pdf, docx)</span>
+                    <input
+                      class="input"
+                      id="zop-quickreply-media-file"
+                      type="file"
+                      accept="audio/*,video/*,image/*,.pdf,.doc,.docx,.xls,.xlsx"
+                    />
+                    <span class="media__file-label" id="zop-quickreply-media-file-label">Nenhum arquivo selecionado</span>
+                  </label>
+                  <label class="field">
+                    <span>Legenda (opcional)</span>
+                    <input class="input" id="zop-quickreply-media-caption" type="text" placeholder="Legenda" />
+                  </label>
+                  <label class="field">
+                    <span>Nome exibido</span>
+                    <input class="input" id="zop-quickreply-file-name" type="text" placeholder="documento.pdf" />
+                  </label>
+                </div>
+                <p class="muted quickreply-media__hint">MP3, PTT gravado, videos, imagens e arquivos do WhatsApp Business são suportados.</p>
+              </div>
+
+              <label class="field">
+                <span>Etiquetas WhatsApp Business (separe por virgula)</span>
+                <input
+                  class="input"
+                  id="zop-quickreply-business-tags"
+                  type="text"
+                  placeholder="Ex: marketing, auto_reply"
+                />
               </label>
             </div>
           </div>

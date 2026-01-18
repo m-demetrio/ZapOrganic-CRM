@@ -1,6 +1,12 @@
 import optionsTemplate from "./options.html?raw";
 import { loadData, saveData } from "../shared/storage";
-import type { Funnel, FunnelStep, IntegrationSettings, QuickReply } from "../shared/schema";
+import type {
+  Funnel,
+  FunnelStep,
+  IntegrationSettings,
+  QuickReply,
+  MediaSource
+} from "../shared/schema";
 
 const FUNNEL_STORAGE_KEY = "zopFunnels";
 const QUICK_REPLY_STORAGE_KEY = "zopQuickReplies";
@@ -9,6 +15,12 @@ const DEFAULT_INTEGRATION_SETTINGS: IntegrationSettings = {
   enableWebhook: false,
   defaultDelaySec: 0
 };
+
+const MEDIA_STEP_TYPES = new Set<FunnelStep["type"]>(["audio", "ptt", "image", "video", "file"]);
+const DEFAULT_MEDIA_SOURCE: MediaSource = "url";
+const MEDIA_FILE_ACCEPT =
+  "audio/*,video/*,image/*,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+const QUICK_REPLY_STAGE_KEY = "draft";
 
 type StatusTone = "info" | "success" | "error";
 
@@ -37,6 +49,20 @@ const parseNumber = (value: string) => {
   return Number.isFinite(parsed) ? parsed : undefined;
 };
 
+const readFileAsDataUrl = (file: File) =>
+  new Promise<{ data: string; mimeType: string; fileName: string }>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      if (!reader.result || typeof reader.result !== "string") {
+        reject(new Error("Falha ao ler arquivo"));
+        return;
+      }
+      resolve({ data: reader.result, mimeType: file.type, fileName: file.name });
+    };
+    reader.onerror = () => reject(reader.error ?? new Error("Falha ao ler arquivo"));
+    reader.readAsDataURL(file);
+  });
+
 const createEmptyFunnel = (): Funnel => ({
   id: createId("funnel"),
   name: "",
@@ -44,17 +70,69 @@ const createEmptyFunnel = (): Funnel => ({
   steps: []
 });
 
+const createEmptyQuickReply = (): QuickReply => ({
+  id: createId("qr"),
+  title: "",
+  categoryId: "",
+  message: "",
+  variables: [],
+  mediaType: "text",
+  createdAt: Date.now(),
+  updatedAt: Date.now()
+});
+
 const normalizeFunnels = (raw: Funnel[]) =>
   raw.map((funnel) => ({
     ...funnel,
-    steps: Array.isArray(funnel.steps) ? funnel.steps : []
+    steps: Array.isArray(funnel.steps)
+      ? funnel.steps.map((step) => ({
+          ...step,
+          mediaSource: step.mediaSource ?? DEFAULT_MEDIA_SOURCE
+        }))
+      : []
   }));
 
 const normalizeQuickReplies = (raw: QuickReply[]) =>
   raw.map((reply) => ({
     ...reply,
-    variables: Array.isArray(reply.variables) ? reply.variables : []
+    variables: Array.isArray(reply.variables) ? reply.variables : [],
+    mediaType: reply.mediaType ?? "text",
+    mediaSource: reply.mediaSource ?? DEFAULT_MEDIA_SOURCE,
+    businessTags: Array.isArray(reply.businessTags) ? reply.businessTags : []
   }));
+
+const formatMediaTypeLabel = (type?: QuickReply["mediaType"]) => {
+  switch (type) {
+    case "audio":
+      return "Audio";
+    case "ptt":
+      return "PTT";
+    case "image":
+      return "Imagem";
+    case "video":
+      return "Video";
+    case "file":
+      return "Arquivo";
+    default:
+      return "Texto";
+  }
+};
+
+const getQuickReplyPreview = (reply: QuickReply) => {
+  const tagLabel = reply.businessTags && reply.businessTags.length ? ` | Etiquetas: ${reply.businessTags.join(', ')}` : '';
+
+  if (reply.mediaType && reply.mediaType !== 'text') {
+    const trimmedUrl = reply.mediaSource === 'file' ? reply.fileName ?? 'Arquivo' : reply.mediaUrl?.split('/')?.pop() ?? reply.mediaUrl ?? 'URL';
+    return `${formatMediaTypeLabel(reply.mediaType)} | ${trimmedUrl}${tagLabel}`;
+  }
+
+  const messagePreview = reply.message?.slice(0, 40) || 'Sem mensagem';
+  return `${messagePreview}${tagLabel}`;
+};
+
+
+
+
 
 const init = async () => {
   const root = document.getElementById("zop-options-root");
@@ -114,6 +192,15 @@ const init = async () => {
   const quickReplyTitleInput = root.querySelector<HTMLInputElement>("#zop-quickreply-title");
   const quickReplyMessageInput = root.querySelector<HTMLTextAreaElement>("#zop-quickreply-message");
   const quickReplyVariablesInput = root.querySelector<HTMLInputElement>("#zop-quickreply-variables");
+  const quickReplyTypeInput = root.querySelector<HTMLSelectElement>("#zop-quickreply-type");
+  const quickReplyMediaUrlInput = root.querySelector<HTMLInputElement>("#zop-quickreply-media-url");
+  const quickReplyMediaCaptionInput = root.querySelector<HTMLInputElement>("#zop-quickreply-media-caption");
+  const quickReplyFileNameInput = root.querySelector<HTMLInputElement>("#zop-quickreply-file-name");
+  const quickReplyMediaSection = root.querySelector<HTMLElement>("#zop-quickreply-media");
+  const quickReplyMediaSourceInput = root.querySelector<HTMLSelectElement>("#zop-quickreply-media-source");
+  const quickReplyMediaFileInput = root.querySelector<HTMLInputElement>("#zop-quickreply-media-file");
+  const quickReplyMediaFileLabel = root.querySelector<HTMLElement>("#zop-quickreply-media-file-label");
+  const quickReplyBusinessTagsInput = root.querySelector<HTMLInputElement>("#zop-quickreply-business-tags");
   const quickReplyEditorTitle = root.querySelector<HTMLElement>("#zop-quickreply-editor-title");
   const newQuickReplyButton = root.querySelector<HTMLButtonElement>("#zop-new-quickreply");
   const saveQuickReplyButton = root.querySelector<HTMLButtonElement>("#zop-save-quickreply");
@@ -134,6 +221,52 @@ const init = async () => {
   let activeFunnel = createEmptyFunnel();
   let activeQuickReplyId: string | null = null;
   const payloadDrafts = new Map<string, string>();
+  const quickReplyMediaCache = new Map<
+    string,
+    { mediaFileData?: string; mediaMimeType?: string; fileName?: string }
+  >();
+
+  const updateStepFileLabel = (element: HTMLElement, name?: string) => {
+    const label = element.querySelector<HTMLElement>("[data-field='mediaFileLabel']");
+    if (label) {
+      label.textContent = name ? `Arquivo: ${name}` : "Nenhum arquivo selecionado";
+    }
+  };
+  const getQuickReplyMediaStageKey = () => activeQuickReplyId ?? QUICK_REPLY_STAGE_KEY;
+  const ensureQuickReplyMediaStage = () => {
+    const key = getQuickReplyMediaStageKey();
+    if (!quickReplyMediaCache.has(key)) {
+      quickReplyMediaCache.set(key, {});
+    }
+    return quickReplyMediaCache.get(key)!;
+  };
+
+  const updateQuickReplyMediaPreview = () => {
+    if (!quickReplyMediaFileLabel) {
+      return;
+    }
+    const stage = ensureQuickReplyMediaStage();
+    quickReplyMediaFileLabel.textContent = stage.fileName
+      ? `Arquivo: ${stage.fileName}`
+      : "Nenhum arquivo selecionado";
+  };
+
+  const applyQuickReplyMediaSource = (source: MediaSource) => {
+    if (!quickReplyMediaSection) {
+      return;
+    }
+    quickReplyMediaSection.dataset.source = source;
+  };
+
+  const updateQuickReplyMediaVisibility = () => {
+    const hasMedia = (quickReplyTypeInput?.value ?? "text") !== "text";
+    if (quickReplyMediaSection) {
+      quickReplyMediaSection.classList.toggle("is-active", hasMedia);
+    }
+    applyQuickReplyMediaSource(
+      (quickReplyMediaSourceInput?.value as MediaSource) ?? DEFAULT_MEDIA_SOURCE
+    );
+  };
 
   const updateFunnelEditorTitle = () => {
     if (!funnelEditorTitle) {
@@ -205,17 +338,25 @@ const init = async () => {
       stepElement.className = "step";
       stepElement.dataset.stepId = step.id;
       stepElement.dataset.stepType = step.type;
+      stepElement.dataset.mediaSource = step.mediaSource ?? DEFAULT_MEDIA_SOURCE;
+      stepElement.draggable = true;
       stepElement.innerHTML = `
         <div class="step__header">
           <div class="step__meta">
             <span class="step__index">Etapa ${index + 1}</span>
             <select class="input input--small" data-field="type">
               <option value="text">Texto</option>
+              <option value="audio">Audio</option>
+              <option value="ptt">PTT (gravado)</option>
+              <option value="image">Imagem</option>
+              <option value="video">Video</option>
+              <option value="file">Arquivo</option>
               <option value="delay">Delay</option>
               <option value="tag">Tags</option>
               <option value="webhook">Webhook</option>
             </select>
           </div>
+          <span class="step__drag-handle" aria-label="Arrastar etapa" title="Arrastar">&#9776;</span>
           <div class="step__actions">
             <button class="icon-button" type="button" data-action="move-up" aria-label="Mover para cima">
               Up
@@ -267,12 +408,58 @@ const init = async () => {
             ></textarea>
           </label>
         </div>
+        <div class="step__group" data-group="media">
+          <div class="media__toolbar">
+            <label class="field field--small">
+              <span>Origem</span>
+              <select class="input input--small" data-field="mediaSource">
+                <option value="url">URL / Link</option>
+                <option value="file">Arquivo</option>
+              </select>
+            </label>
+          </div>
+          <label class="field media__field media__field--url">
+            <span>URL ou caminho do arquivo</span>
+            <input
+              class="input"
+              data-field="mediaUrl"
+              type="text"
+              placeholder="https://... ou caminho local"
+            />
+          </label>
+          <label class="field media__field media__field--file">
+            <span>Upload (mp3, mp4, png, pdf, docx)</span>
+            <input
+              class="input"
+              data-field="mediaFile"
+              type="file"
+              accept="${MEDIA_FILE_ACCEPT}"
+            />
+            <span class="media__file-label" data-field="mediaFileLabel">Nenhum arquivo selecionado</span>
+          </label>
+          <label class="field">
+            <span>Legenda (opcional)</span>
+            <input class="input" data-field="mediaCaption" type="text" placeholder="Texto da legenda" />
+          </label>
+          <label class="field">
+            <span>Nome do arquivo (ex: documento.pdf)</span>
+            <input class="input" data-field="fileName" type="text" placeholder="documento.pdf" />
+          </label>
+        </div>
       `;
 
       const typeSelect = stepElement.querySelector<HTMLSelectElement>("select[data-field='type']");
       if (typeSelect) {
         typeSelect.value = step.type;
       }
+      const mediaSourceSelect = stepElement.querySelector<HTMLSelectElement>(
+        "select[data-field='mediaSource']"
+      );
+      const resolvedMediaSource = step.mediaSource ?? DEFAULT_MEDIA_SOURCE;
+      if (mediaSourceSelect) {
+        mediaSourceSelect.value = resolvedMediaSource;
+      }
+      stepElement.dataset.mediaSource = resolvedMediaSource;
 
       const textArea = stepElement.querySelector<HTMLTextAreaElement>("textarea[data-field='text']");
       if (textArea) {
@@ -307,6 +494,22 @@ const init = async () => {
         payloadDrafts.set(step.id, payloadText);
         payloadInput.value = payloadText;
       }
+
+      const mediaUrlInput = stepElement.querySelector<HTMLInputElement>("input[data-field='mediaUrl']");
+      if (mediaUrlInput) {
+        mediaUrlInput.value = step.mediaUrl ?? "";
+      }
+
+      const mediaCaptionInput = stepElement.querySelector<HTMLInputElement>("input[data-field='mediaCaption']");
+      if (mediaCaptionInput) {
+        mediaCaptionInput.value = step.mediaCaption ?? "";
+      }
+
+      const fileNameInput = stepElement.querySelector<HTMLInputElement>("input[data-field='fileName']");
+      if (fileNameInput) {
+        fileNameInput.value = step.fileName ?? "";
+      }
+      updateStepFileLabel(stepElement, step.fileName);
 
       const moveUp = stepElement.querySelector<HTMLButtonElement>("button[data-action='move-up']");
       if (moveUp) {
@@ -345,11 +548,24 @@ const init = async () => {
   const setActiveQuickReply = (reply: QuickReply | null) => {
     activeQuickReplyId = reply?.id ?? null;
 
+    if (reply) {
+      quickReplyMediaCache.set(reply.id, {
+        mediaFileData: reply.mediaFileData,
+        mediaMimeType: reply.mediaMimeType,
+        fileName: reply.fileName
+      });
+    } else {
+      quickReplyMediaCache.set(QUICK_REPLY_STAGE_KEY, {});
+    }
+
     if (quickReplyCategoryInput) {
       quickReplyCategoryInput.value = reply?.categoryId ?? "";
     }
     if (quickReplyTitleInput) {
       quickReplyTitleInput.value = reply?.title ?? "";
+    }
+    if (quickReplyTypeInput) {
+      quickReplyTypeInput.value = reply?.mediaType ?? "text";
     }
     if (quickReplyMessageInput) {
       quickReplyMessageInput.value = reply?.message ?? "";
@@ -357,6 +573,39 @@ const init = async () => {
     if (quickReplyVariablesInput) {
       quickReplyVariablesInput.value = reply?.variables?.join(", ") ?? "";
     }
+    if (quickReplyMediaSourceInput) {
+      quickReplyMediaSourceInput.value = reply?.mediaSource ?? DEFAULT_MEDIA_SOURCE;
+    }
+    if (quickReplyMediaUrlInput) {
+      quickReplyMediaUrlInput.value = reply?.mediaUrl ?? "";
+    }
+    if (quickReplyMediaCaptionInput) {
+      quickReplyMediaCaptionInput.value = reply?.mediaCaption ?? "";
+    }
+    if (quickReplyBusinessTagsInput) {
+      quickReplyBusinessTagsInput.value = reply?.businessTags?.join(", ") ?? "";
+    }
+
+    const stage = ensureQuickReplyMediaStage();
+    if (reply) {
+      if (!stage.mediaFileData && reply.mediaFileData) {
+        stage.mediaFileData = reply.mediaFileData;
+        stage.mediaMimeType = reply.mediaMimeType;
+      }
+      stage.fileName = stage.fileName ?? reply.fileName ?? "";
+    } else {
+      stage.mediaFileData = undefined;
+      stage.mediaMimeType = undefined;
+      stage.fileName = undefined;
+    }
+
+    if (quickReplyFileNameInput) {
+      quickReplyFileNameInput.value = stage.fileName ?? reply?.fileName ?? "";
+    }
+
+    updateQuickReplyMediaPreview();
+    updateQuickReplyMediaVisibility();
+
     if (deleteQuickReplyButton) {
       deleteQuickReplyButton.disabled = !reply;
     }
@@ -438,6 +687,7 @@ const init = async () => {
 
     const normalizedSteps: FunnelStep[] = activeFunnel.steps.map((step) => {
       const tags = (step.addTags ?? []).map((tag) => tag.trim()).filter(Boolean);
+      const source = step.mediaSource ?? DEFAULT_MEDIA_SOURCE;
       const next: FunnelStep = {
         ...step,
         text: step.text?.trim() || undefined,
@@ -445,7 +695,13 @@ const init = async () => {
         delayExpr: step.delayExpr?.trim() || undefined,
         addTags: tags.length ? tags : undefined,
         webhookEvent: step.webhookEvent?.trim() || undefined,
-        payloadTemplate: undefined
+        payloadTemplate: undefined,
+        mediaSource: source,
+        mediaUrl: source === "url" ? step.mediaUrl?.trim() || undefined : undefined,
+        mediaCaption: step.mediaCaption?.trim() || undefined,
+        fileName: step.fileName?.trim() || undefined,
+        mediaFileData: source === "file" ? step.mediaFileData : undefined,
+        mediaMimeType: source === "file" ? step.mediaMimeType : undefined
       };
 
       if (step.type === "webhook") {
@@ -525,6 +781,15 @@ const init = async () => {
 
     const category = quickReplyCategoryInput.value.trim() || "Sem categoria";
     const variables = quickReplyVariablesInput ? parseList(quickReplyVariablesInput.value) : [];
+    const mediaType = (quickReplyTypeInput?.value as QuickReply["mediaType"]) ?? "text";
+    const mediaSource = (quickReplyMediaSourceInput?.value as MediaSource) ?? DEFAULT_MEDIA_SOURCE;
+    const stage = ensureQuickReplyMediaStage();
+    const mediaUrl = mediaSource === "url" ? quickReplyMediaUrlInput?.value.trim() || undefined : undefined;
+    const mediaCaption = quickReplyMediaCaptionInput?.value.trim() || undefined;
+    const fileName = quickReplyFileNameInput?.value.trim() || stage.fileName || undefined;
+    const mediaFileData = mediaSource === "file" ? stage.mediaFileData : undefined;
+    const mediaMimeType = mediaSource === "file" ? stage.mediaMimeType : undefined;
+    const businessTags = parseList(quickReplyBusinessTagsInput?.value ?? "");
     const now = Date.now();
 
     const existingIndex = activeQuickReplyId
@@ -532,28 +797,43 @@ const init = async () => {
       : -1;
 
     let saved: QuickReply;
+    const sharedFields: Partial<QuickReply> = {
+      title,
+      categoryId: category,
+      message,
+      variables,
+      mediaType,
+      mediaSource,
+      mediaCaption,
+      mediaUrl,
+      fileName,
+      mediaFileData,
+      mediaMimeType,
+      businessTags: businessTags.length ? businessTags : undefined,
+      updatedAt: now
+    };
+
     if (existingIndex >= 0) {
       saved = {
         ...quickReplies[existingIndex],
-        title,
-        categoryId: category,
-        message,
-        variables,
-        updatedAt: now
+        ...sharedFields
       };
       quickReplies[existingIndex] = saved;
     } else {
       saved = {
         id: createId("qr"),
-        title,
-        categoryId: category,
-        message,
-        variables,
         createdAt: now,
-        updatedAt: now
+        ...sharedFields
       };
       quickReplies = [...quickReplies, saved];
     }
+
+    quickReplyMediaCache.set(saved.id, {
+      mediaFileData,
+      mediaMimeType,
+      fileName
+    });
+    quickReplyMediaCache.delete(QUICK_REPLY_STAGE_KEY);
 
     await saveData(QUICK_REPLY_STORAGE_KEY, quickReplies);
     setActiveQuickReply(saved);
@@ -671,7 +951,8 @@ const init = async () => {
     activeFunnel.steps.push({
       id: createId("step"),
       type: "text",
-      text: ""
+      text: "",
+      mediaSource: DEFAULT_MEDIA_SOURCE
     });
     renderSteps();
   };
@@ -716,13 +997,19 @@ const init = async () => {
       step.webhookEvent = (target as HTMLInputElement).value;
     } else if (field === "payloadTemplate") {
       payloadDrafts.set(step.id, (target as HTMLTextAreaElement).value);
+    } else if (field === "mediaUrl") {
+      step.mediaUrl = (target as HTMLInputElement).value;
+    } else if (field === "mediaCaption") {
+      step.mediaCaption = (target as HTMLInputElement).value;
+    } else if (field === "fileName") {
+      step.fileName = (target as HTMLInputElement).value;
     }
   });
 
   stepsList?.addEventListener("change", (event) => {
     const target = event.target as HTMLElement;
     const field = target.getAttribute("data-field");
-    if (field !== "type") {
+    if (!field) {
       return;
     }
 
@@ -736,8 +1023,42 @@ const init = async () => {
       return;
     }
 
-    step.type = (target as HTMLSelectElement).value as FunnelStep["type"];
-    stepElement.dataset.stepType = step.type;
+    if (field === "type") {
+      step.type = (target as HTMLSelectElement).value as FunnelStep["type"];
+      stepElement.dataset.stepType = step.type;
+      return;
+    }
+
+    if (field === "mediaSource") {
+      step.mediaSource = (target as HTMLSelectElement).value as MediaSource;
+      stepElement.dataset.mediaSource = step.mediaSource;
+      return;
+    }
+
+    if (field === "mediaFile") {
+      const fileInput = target as HTMLInputElement;
+      const file = fileInput.files?.[0];
+      if (!file) {
+        step.mediaFileData = undefined;
+        step.mediaMimeType = undefined;
+        step.fileName = undefined;
+        updateStepFileLabel(stepElement, undefined);
+        return;
+      }
+
+      const fileLabel = stepElement.querySelector<HTMLElement>("[data-field='mediaFileLabel']");
+      if (fileLabel) {
+        fileLabel.textContent = `Arquivo: ${file.name}`;
+      }
+
+      void readFileAsDataUrl(file).then((result) => {
+        step.mediaFileData = result.data;
+        step.mediaMimeType = result.mimeType;
+        step.fileName = result.fileName;
+        updateStepFileLabel(stepElement, result.fileName);
+      });
+      return;
+    }
   });
 
   stepsList?.addEventListener("click", (event) => {
@@ -788,6 +1109,38 @@ const init = async () => {
   });
   saveQuickReplyButton?.addEventListener("click", () => void saveQuickReply());
   deleteQuickReplyButton?.addEventListener("click", () => void deleteQuickReply());
+  quickReplyTypeInput?.addEventListener("change", () => {
+    updateQuickReplyMediaVisibility();
+  });
+  quickReplyMediaSourceInput?.addEventListener("change", () => {
+    const source = (quickReplyMediaSourceInput.value as MediaSource) ?? DEFAULT_MEDIA_SOURCE;
+    applyQuickReplyMediaSource(source);
+    updateQuickReplyMediaVisibility();
+  });
+  quickReplyMediaFileInput?.addEventListener("change", () => {
+    const file = quickReplyMediaFileInput.files?.[0];
+    const stage = ensureQuickReplyMediaStage();
+    if (!file) {
+      stage.mediaFileData = undefined;
+      stage.mediaMimeType = undefined;
+      stage.fileName = undefined;
+      updateQuickReplyMediaPreview();
+      return;
+    }
+    void readFileAsDataUrl(file).then((fileData) => {
+      stage.mediaFileData = fileData.data;
+      stage.mediaMimeType = fileData.mimeType;
+      stage.fileName = fileData.fileName;
+      if (quickReplyFileNameInput) {
+        quickReplyFileNameInput.value = fileData.fileName;
+      }
+      updateQuickReplyMediaPreview();
+    });
+  });
+  quickReplyFileNameInput?.addEventListener("input", () => {
+    ensureQuickReplyMediaStage().fileName = quickReplyFileNameInput.value.trim() || undefined;
+    updateQuickReplyMediaPreview();
+  });
 
   saveIntegrationsButton?.addEventListener("click", () => void saveIntegrations());
 

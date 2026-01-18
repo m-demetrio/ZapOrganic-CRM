@@ -11,6 +11,10 @@ const manifest = {
   action: {
     default_title: "ZapOrganic CRM"
   },
+  options_ui: {
+    page: "options/options.html",
+    open_in_tab: true
+  },
   options_page: "options/options.html",
   content_scripts: [
     {
@@ -21,7 +25,13 @@ const manifest = {
   ],
   web_accessible_resources: [
     {
-      resources: ["src/pageBridge/index.js", "wppconnect-wa.js", "logo-zaporganic.png"],
+      resources: [
+        "src/pageBridge/index.js",
+        "wppconnect-wa.js",
+        "logo-zaporganic.png",
+        "options/options.html",
+        "dashboard/dashboard.html"
+      ],
       matches: ["https://web.whatsapp.com/*"]
     }
   ]

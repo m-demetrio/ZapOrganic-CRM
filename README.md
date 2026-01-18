@@ -45,11 +45,13 @@ pnpm lint
 3. Clique em Load unpacked.
 4. Selecione a pasta `dist/`.
 
-## Pagina de configuracoes
+## Opções
 
-1. Abra a engrenagem na sidebar ou use `chrome://extensions` -> Detalhes -> Pagina de opcoes.
-2. Use as abas Funis, Respostas rapidas, Integracoes e Backups.
-3. Clique em Salvar para persistir no storage; a sidebar atualiza automaticamente.
+1. Abra a engrenagem na sidebar ou use `chrome://extensions` → Detalhes → Página de opções (o mesmo painel também está disponível em `dashboard/dashboard.html` para quem prefere o layout estilo ZapVoice).
+2. Na aba **Funis** organize etapas com drag & drop, delays, payloads JSON e mídias configuradas por URL ou upload (áudio, PTT, imagem, vídeo e arquivos com legenda).
+3. Em **Respostas rápidas** reutilize mensagens com áudio, imagem, vídeo ou arquivos (PDF, DOCX, XLSX) e defina etiquetas do WhatsApp Business; escolha origem (URL ou arquivo) e mantenha o nome/legenda no storage.
+4. Use **Integrações** para configurar webhook/secret do n8n e **Backups** para exportar ou restaurar o JSON completo.
+5. Clique em *Salvar* para gravar tudo no storage; a extensão detecta a alteração e atualiza automaticamente a interface.
 
 ## Validacao rapida
 
