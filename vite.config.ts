@@ -8,6 +8,10 @@ const manifest = {
   description: "ZapOrganic CRM MVP com sidebar retratil no WhatsApp Web.",
   host_permissions: ["https://web.whatsapp.com/*"],
   permissions: ["storage"],
+  background: {
+    service_worker: "src/background/index.ts",
+    type: "module"
+  },
   action: {
     default_title: "ZapOrganic CRM"
   },

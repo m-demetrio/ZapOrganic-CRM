@@ -311,6 +311,7 @@ const init = async () => {
   let activeQuickReplyId: string | null = null;
   const payloadDrafts = new Map<string, string>();
   const quickReplyMediaCache = new Map<string, { mediaId?: string; fileName?: string }>();
+  const pendingMediaUploads = new Map<string, Promise<void>>();
   let draggedStepId: string | null = null;
   let dropTargetElement: HTMLElement | null = null;
 
@@ -814,6 +815,7 @@ const init = async () => {
     }
 
     let invalidStepId: string | null = null;
+    let invalidReason: "payload" | "media" | null = null;
 
     const normalizedSteps: FunnelStep[] = activeFunnel.steps.map((step) => {
       const tags = (step.addTags ?? []).map((tag) => tag.trim()).filter(Boolean);
@@ -835,6 +837,11 @@ const init = async () => {
         mediaDurationSec: step.mediaDurationSec
       };
 
+      if (MEDIA_STEP_TYPES.has(step.type) && !next.mediaId) {
+        invalidStepId = step.id;
+        invalidReason = "media";
+      }
+
       if (step.type === "webhook") {
         const raw = payloadDrafts.get(step.id);
         if (raw && raw.trim()) {
@@ -842,6 +849,7 @@ const init = async () => {
             next.payloadTemplate = JSON.parse(raw) as Record<string, unknown>;
           } catch {
             invalidStepId = step.id;
+            invalidReason = "payload";
           }
         }
       }
@@ -852,7 +860,11 @@ const init = async () => {
     if (invalidStepId) {
       const stepElement = stepsList?.querySelector<HTMLElement>(`[data-step-id="${invalidStepId}"]`);
       stepElement?.classList.add("step--error");
-      setStatus("Payload JSON invalido na etapa selecionada.", "error");
+      if (invalidReason === "media") {
+        setStatus("Selecione um arquivo para a etapa de midia.", "error");
+      } else {
+        setStatus("Payload JSON invalido na etapa selecionada.", "error");
+      }
       return null;
     }
 
@@ -865,6 +877,10 @@ const init = async () => {
   };
 
   const saveFunnels = async () => {
+    if (pendingMediaUploads.size > 0) {
+      await Promise.all(Array.from(pendingMediaUploads.values()));
+    }
+
     const prepared = buildFunnelForSave();
     if (!prepared) {
       return;
@@ -903,6 +919,12 @@ const init = async () => {
       return;
     }
 
+    const quickReplyStageKey = `qr:${getQuickReplyMediaStageKey()}`;
+    const pendingQuickReply = pendingMediaUploads.get(quickReplyStageKey);
+    if (pendingQuickReply) {
+      await pendingQuickReply;
+    }
+
     const title = quickReplyTitleInput.value.trim();
     const message = quickReplyMessageInput.value.trim();
     if (!title || !message) {
@@ -919,6 +941,11 @@ const init = async () => {
     const mediaId = stage.mediaId;
     const businessTags = parseList(quickReplyBusinessTagsInput?.value ?? "");
     const now = Date.now();
+
+    if (mediaType !== "text" && !mediaId) {
+      setStatus("Selecione um arquivo para a resposta rapida.", "error");
+      return;
+    }
 
     const existingIndex = activeQuickReplyId
       ? quickReplies.findIndex((item) => item.id === activeQuickReplyId)
@@ -1183,7 +1210,8 @@ const init = async () => {
         fileLabel.textContent = `Arquivo: ${file.name}`;
       }
 
-      void readFileAsDataUrl(file)
+      const uploadKey = `step:${step.id}`;
+      const uploadPromise = readFileAsDataUrl(file)
         .then(async (result) => {
           const mediaId = await putMedia(result.data, result.mimeType, result.fileName);
           step.mediaId = mediaId;
@@ -1202,7 +1230,12 @@ const init = async () => {
         .catch((error) => {
           console.error("[ZOP][MEDIA] Falha ao salvar arquivo", error);
           setStatus("Falha ao salvar arquivo no banco local.", "error");
+        })
+        .finally(() => {
+          pendingMediaUploads.delete(uploadKey);
         });
+
+      pendingMediaUploads.set(uploadKey, uploadPromise);
       return;
     }
   });
@@ -1267,7 +1300,8 @@ const init = async () => {
       updateQuickReplyMediaPreview();
       return;
     }
-    void readFileAsDataUrl(file)
+    const uploadKey = `qr:${getQuickReplyMediaStageKey()}`;
+    const uploadPromise = readFileAsDataUrl(file)
       .then(async (fileData) => {
         const mediaId = await putMedia(fileData.data, fileData.mimeType, fileData.fileName);
         stage.mediaId = mediaId;
@@ -1280,7 +1314,11 @@ const init = async () => {
       .catch((error) => {
         console.error("[ZOP][MEDIA] Falha ao salvar arquivo", error);
         setStatus("Falha ao salvar arquivo no banco local.", "error");
+      })
+      .finally(() => {
+        pendingMediaUploads.delete(uploadKey);
       });
+    pendingMediaUploads.set(uploadKey, uploadPromise);
   });
   quickReplyFileNameInput?.addEventListener("input", () => {
     ensureQuickReplyMediaStage().fileName = quickReplyFileNameInput.value.trim() || undefined;

@@ -135,6 +135,22 @@ const getMimeFromDataUrl = (dataUrl: string) => {
   return match?.[1];
 };
 
+const requestMediaFromExtension = async (id: string) => {
+  if (!chrome?.runtime?.sendMessage) {
+    return null;
+  }
+
+  try {
+    const response = await chrome.runtime.sendMessage({ type: "zop:media:get", id });
+    if (!response?.ok) {
+      return null;
+    }
+    return response.record ?? null;
+  } catch {
+    return null;
+  }
+};
+
 const resolveMediaPayload = async (step: FunnelStep) => {
   if (!step.mediaSource || step.mediaSource === "file") {
     if (step.mediaFileData) {
@@ -147,7 +163,7 @@ const resolveMediaPayload = async (step: FunnelStep) => {
     }
 
     if (step.mediaId) {
-      const stored = await getMedia(step.mediaId);
+      const stored = (await requestMediaFromExtension(step.mediaId)) ?? (await getMedia(step.mediaId));
       if (!stored?.dataUrl) {
         return null;
       }
