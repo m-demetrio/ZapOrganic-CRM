@@ -478,6 +478,23 @@ const buildSendFileOptions = (
   return options;
 };
 
+const getSendFileTimeoutMs = (step: FunnelStep) => {
+  switch (step.type) {
+    case "video":
+    case "ptv":
+      return 120000;
+    case "audio":
+    case "ptt":
+      return 60000;
+    case "file":
+      return 90000;
+    case "image":
+      return 45000;
+    default:
+      return 30000;
+  }
+};
+
 const sendMediaStep = async (chatId: string, step: FunnelStep) => {
   const media = await resolveMediaPayload(step);
   if (!media) {
@@ -486,13 +503,14 @@ const sendMediaStep = async (chatId: string, step: FunnelStep) => {
   }
 
   const caption = step.mediaCaption?.trim() || undefined;
+  const timeoutMs = getSendFileTimeoutMs(step);
   const sendFile = (options: Record<string, unknown>) =>
     dispatchBridgeRequest<SendMessageResult>({
       type: "send-file",
       chatId,
       file: media.file,
       options
-    });
+    }, timeoutMs);
 
   const primaryOptions = buildSendFileOptions(step, media, caption);
   const result = await sendFile(primaryOptions);
