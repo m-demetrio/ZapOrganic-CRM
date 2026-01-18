@@ -1,4 +1,4 @@
-export type MediaSource = "url" | "file";
+export type MediaSource = "file";
 
 export type MediaDurationMode = "manual" | "file";
 
@@ -12,11 +12,11 @@ export type FunnelStep = {
   webhookEvent?: string;
   payloadTemplate?: Record<string, unknown>;
   mediaSource?: MediaSource;
-  mediaUrl?: string;
   mediaCaption?: string;
   fileName?: string;
   mediaFileData?: string;
   mediaMimeType?: string;
+  mediaId?: string;
   mediaDurationMode?: MediaDurationMode;
   mediaDurationSec?: number;
 };
@@ -55,11 +55,11 @@ export type QuickReply = {
   variables?: string[];
   mediaType?: QuickReplyMediaType;
   mediaSource?: MediaSource;
-  mediaUrl?: string;
   mediaCaption?: string;
   fileName?: string;
   mediaFileData?: string;
   mediaMimeType?: string;
+  mediaId?: string;
   businessTags?: string[];
   createdAt: number;
   updatedAt: number;

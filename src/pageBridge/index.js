@@ -179,7 +179,7 @@ const handleRequest = (event) => {
 
   if (detail.type === "mark-composing" || detail.type === "mark-recording") {
     const chatId = getDetailValue(detail, "chatId");
-    const value = Boolean(getDetailValue(detail, "value"));
+    const durationMs = getDetailValue(detail, "durationMs");
     if (!chatId) {
       emitResponse(detail.id, { ok: false, error: "missing-chat" });
       return;
@@ -193,7 +193,9 @@ const handleRequest = (event) => {
     }
 
     try {
-      const call = () => wpp.chat[method](chatId, value);
+      const timeout =
+        typeof durationMs === "number" && Number.isFinite(durationMs) && durationMs > 0 ? durationMs : undefined;
+      const call = () => wpp.chat[method](chatId, timeout);
       resolveMaybePromise(call(), () => {
         emitResponse(detail.id, { ok: true });
       });
@@ -221,11 +223,43 @@ const handleRequest = (event) => {
       return;
     }
 
-    Promise.resolve(wpp.chat.sendFileMessage(chatId, file, filename, caption, options))
+    const normalizedOptions =
+      options && typeof options === "object" ? { ...options } : {};
+    if (filename && !normalizedOptions.filename) {
+      normalizedOptions.filename = filename;
+    }
+    if (caption && !normalizedOptions.caption) {
+      normalizedOptions.caption = caption;
+    }
+
+    Promise.resolve(wpp.chat.sendFileMessage(chatId, file, normalizedOptions))
       .then((result) => emitResponse(detail.id, { ok: true, result }))
       .catch((error) => {
         emitResponse(detail.id, { ok: false, error: error?.message || String(error) });
       });
+    return;
+  }
+
+  if (detail.type === "mark-paused") {
+    const chatId = getDetailValue(detail, "chatId");
+    if (!chatId) {
+      emitResponse(detail.id, { ok: false, error: "missing-chat" });
+      return;
+    }
+
+    const wpp = window.WPP;
+    if (!wpp?.chat || typeof wpp.chat.markIsPaused !== "function") {
+      emitResponse(detail.id, { ok: false, error: "wpp-not-ready" });
+      return;
+    }
+
+    try {
+      resolveMaybePromise(wpp.chat.markIsPaused(chatId), () => {
+        emitResponse(detail.id, { ok: true });
+      });
+    } catch (error) {
+      emitResponse(detail.id, { ok: false, error: error?.message || String(error) });
+    }
     return;
   }
 

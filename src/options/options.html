@@ -34,7 +34,7 @@
           <button class="button" id="zop-new-funnel" type="button">Novo funil</button>
         </div>
         <p class="panel__note">
-          Arraste as etapas ou use os botoes Up/Down para organizar o fluxo. Os uploads e URLs ficam salvos localmente.
+          Arraste as etapas ou use os botoes Up/Down para organizar o fluxo. Os uploads ficam salvos no banco local.
         </p>
 
         <div class="grid grid--two">
@@ -165,7 +165,7 @@
                   <option value="file">Arquivo</option>
                 </select>
               </label>
-              <p class="quickreply__hint">Escolha o tipo e configure a origem do áudio, imagem, vídeo ou arquivo.</p>
+              <p class="quickreply__hint">Escolha o tipo e configure o arquivo local.</p>
               <label class="field">
                 <span>Mensagem</span>
                 <textarea
@@ -182,17 +182,6 @@
 
               <div class="quickreply-media" id="zop-quickreply-media">
                 <div class="field-grid">
-                  <label class="field field--small">
-                    <span>Origem</span>
-                    <select class="input input--small" id="zop-quickreply-media-source">
-                      <option value="url">URL / Link</option>
-                      <option value="file">Arquivo</option>
-                    </select>
-                  </label>
-                  <label class="field quickreply-media__field quickreply-media__field--url">
-                    <span>URL direta</span>
-                    <input class="input" id="zop-quickreply-media-url" type="text" placeholder="https://..." />
-                  </label>
                   <label class="field quickreply-media__field quickreply-media__field--file">
                     <span>Upload (mp3, mp4, png, pdf, docx)</span>
                     <input

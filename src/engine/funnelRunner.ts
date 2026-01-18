@@ -1,5 +1,6 @@
 import { resolveDelaySec } from "../shared/delay";
 import { loadData, saveData } from "../shared/storage";
+import { getMedia } from "../shared/mediaStore";
 import type { Funnel, FunnelStep, IntegrationSettings, LeadCard } from "../shared/schema";
 
 const LOG_PREFIX = "[ZOP][FUNNEL]";
@@ -118,51 +119,44 @@ const sendMessageViaPageBridge = (
 ): Promise<SendMessageResult | null> =>
   dispatchBridgeRequest<SendMessageResult>({ type: "send-text", chatId, text, options });
 
+const PRESENCE_DURATION_MS = 15000;
+
 const markChatPresence = (chatId: string, type: "mark-composing" | "mark-recording", value: boolean) => {
-  void dispatchBridgeRequest({ type, chatId, value }).catch(() => {});
-};
-
-const dataUrlToBlob = (dataUrl: string, overrideMime?: string) => {
-  const [meta, encoded] = dataUrl.split(",");
-  const match = meta.match(/data:(.*?);base64/);
-  const mimeType = overrideMime ?? match?.[1] ?? "application/octet-stream";
-  const byteString = atob(encoded);
-  const arrayBuffer = new Uint8Array(byteString.length);
-  for (let index = 0; index < byteString.length; index += 1) {
-    arrayBuffer[index] = byteString.charCodeAt(index);
-  }
-  return new Blob([arrayBuffer], { type: mimeType });
-};
-
-const getFileNameFromUrl = (url: string) => {
-  try {
-    const parsed = new URL(url);
-    const segment = parsed.pathname.split("/").filter(Boolean).pop();
-    return segment;
-  } catch {
-    return undefined;
-  }
-};
-
-const resolveMediaBlob = async (step: FunnelStep) => {
-  if (step.mediaSource === "file" && step.mediaFileData) {
-    const blob = dataUrlToBlob(step.mediaFileData, step.mediaMimeType);
-    return {
-      file: blob,
-      filename: step.fileName || "arquivo"
-    };
+  if (value) {
+    void dispatchBridgeRequest({ type, chatId, durationMs: PRESENCE_DURATION_MS }).catch(() => {});
+    return;
   }
 
-  if (step.mediaUrl) {
-    const response = await fetch(step.mediaUrl);
-    if (!response.ok) {
-      throw new Error("media-fetch-failed");
+  void dispatchBridgeRequest({ type: "mark-paused", chatId }).catch(() => {});
+};
+
+const getMimeFromDataUrl = (dataUrl: string) => {
+  const match = dataUrl.match(/^data:(.*?);base64,/);
+  return match?.[1];
+};
+
+const resolveMediaPayload = async (step: FunnelStep) => {
+  if (!step.mediaSource || step.mediaSource === "file") {
+    if (step.mediaFileData) {
+      const mimeType = step.mediaMimeType ?? getMimeFromDataUrl(step.mediaFileData);
+      return {
+        file: step.mediaFileData,
+        filename: step.fileName || "arquivo",
+        mimeType
+      };
     }
-    const blob = await response.blob();
-    return {
-      file: blob,
-      filename: step.fileName || getFileNameFromUrl(step.mediaUrl) || "arquivo"
-    };
+
+    if (step.mediaId) {
+      const stored = await getMedia(step.mediaId);
+      if (!stored?.dataUrl) {
+        return null;
+      }
+      return {
+        file: stored.dataUrl,
+        filename: step.fileName || stored.fileName || "arquivo",
+        mimeType: stored.mimeType ?? getMimeFromDataUrl(stored.dataUrl)
+      };
+    }
   }
 
   return null;
@@ -328,8 +322,52 @@ const getPresenceTypeForStep = (
   return null;
 };
 
+const resolveMediaType = (stepType: FunnelStep["type"]) => {
+  switch (stepType) {
+    case "audio":
+    case "ptt":
+      return "audio";
+    case "image":
+      return "image";
+    case "video":
+      return "video";
+    case "file":
+      return "document";
+    default:
+      return "auto-detect";
+  }
+};
+
+const buildSendFileOptions = (
+  step: FunnelStep,
+  media: { filename: string; mimeType?: string },
+  caption?: string
+) => {
+  const options: Record<string, unknown> = {
+    type: resolveMediaType(step.type)
+  };
+
+  if (media.filename) {
+    options.filename = media.filename;
+  }
+
+  if (media.mimeType) {
+    options.mimetype = media.mimeType;
+  }
+
+  if (caption) {
+    options.caption = caption;
+  }
+
+  if (step.type === "ptt") {
+    options.isPtt = true;
+  }
+
+  return options;
+};
+
 const sendMediaStep = async (chatId: string, step: FunnelStep) => {
-  const media = await resolveMediaBlob(step);
+  const media = await resolveMediaPayload(step);
   if (!media) {
     warn("Skipping media step without source", step.id);
     return false;
@@ -340,8 +378,7 @@ const sendMediaStep = async (chatId: string, step: FunnelStep) => {
     type: "send-file",
     chatId,
     file: media.file,
-    filename: media.filename,
-    caption
+    options: buildSendFileOptions(step, media, caption)
   });
 
   if (!result?.ok) {

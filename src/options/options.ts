@@ -1,5 +1,6 @@
 import optionsTemplate from "./options.html?raw";
 import { loadData, saveData } from "../shared/storage";
+import { putMedia } from "../shared/mediaStore";
 import type {
   Funnel,
   FunnelStep,
@@ -18,7 +19,7 @@ const DEFAULT_INTEGRATION_SETTINGS: IntegrationSettings = {
 };
 
 const MEDIA_STEP_TYPES = new Set<FunnelStep["type"]>(["audio", "ptt", "image", "video", "file"]);
-const DEFAULT_MEDIA_SOURCE: MediaSource = "url";
+const DEFAULT_MEDIA_SOURCE: MediaSource = "file";
 const MEDIA_FILE_ACCEPT =
   "audio/*,video/*,image/*,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
 const DEFAULT_MEDIA_DURATION_MODE: MediaDurationMode = "manual";
@@ -91,6 +92,18 @@ const estimateMediaDuration = (dataUrl: string, type: "audio" | "video") =>
     element.src = dataUrl;
   });
 
+const migrateMediaRecord = async (dataUrl?: string, mimeType?: string, fileName?: string) => {
+  if (!dataUrl) {
+    return null;
+  }
+  try {
+    return await putMedia(dataUrl, mimeType, fileName);
+  } catch (error) {
+    console.error("[ZOP][MEDIA] Falha ao migrar arquivo", error);
+    return null;
+  }
+};
+
 const createEmptyFunnel = (): Funnel => ({
   id: createId("funnel"),
   name: "",
@@ -115,7 +128,7 @@ const normalizeFunnels = (raw: Funnel[]) =>
     steps: Array.isArray(funnel.steps)
       ? funnel.steps.map((step) => ({
           ...step,
-          mediaSource: step.mediaSource ?? DEFAULT_MEDIA_SOURCE,
+          mediaSource: "file",
           mediaDurationMode: step.mediaDurationMode ?? DEFAULT_MEDIA_DURATION_MODE
         }))
       : []
@@ -126,7 +139,7 @@ const normalizeQuickReplies = (raw: QuickReply[]) =>
     ...reply,
     variables: Array.isArray(reply.variables) ? reply.variables : [],
     mediaType: reply.mediaType ?? "text",
-    mediaSource: reply.mediaSource ?? DEFAULT_MEDIA_SOURCE,
+    mediaSource: "file",
     businessTags: Array.isArray(reply.businessTags) ? reply.businessTags : []
   }));
 
@@ -150,10 +163,7 @@ const formatMediaTypeLabel = (type?: QuickReply["mediaType"]) => {
 const getQuickReplyPreview = (reply: QuickReply) => {
   const parts: string[] = [];
   if (reply.mediaType && reply.mediaType !== "text") {
-    const trimmedUrl =
-      reply.mediaSource === "file"
-        ? reply.fileName ?? "Arquivo"
-        : reply.mediaUrl?.split("/")?.pop() ?? reply.mediaUrl ?? "URL";
+    const trimmedUrl = reply.fileName ?? "Arquivo";
     parts.push(formatMediaTypeLabel(reply.mediaType));
     parts.push(trimmedUrl);
   } else {
@@ -167,7 +177,51 @@ const getQuickReplyPreview = (reply: QuickReply) => {
   return parts.join(" | ");
 };
 
+const migrateFunnelsMedia = async (items: Funnel[]) => {
+  let changed = false;
+  for (const funnel of items) {
+    for (const step of funnel.steps ?? []) {
+      const stepRecord = step as FunnelStep & { mediaUrl?: string };
+      step.mediaSource = "file";
+      if (stepRecord.mediaUrl) {
+        delete (stepRecord as Record<string, unknown>).mediaUrl;
+        changed = true;
+      }
+      if (step.mediaFileData && !step.mediaId) {
+        const mediaId = await migrateMediaRecord(step.mediaFileData, step.mediaMimeType, step.fileName);
+        if (mediaId) {
+          step.mediaId = mediaId;
+          step.mediaFileData = undefined;
+          step.mediaMimeType = undefined;
+          changed = true;
+        }
+      }
+    }
+  }
+  return changed;
+};
 
+const migrateQuickRepliesMedia = async (items: QuickReply[]) => {
+  let changed = false;
+  for (const reply of items) {
+    const replyRecord = reply as QuickReply & { mediaUrl?: string };
+    reply.mediaSource = "file";
+    if (replyRecord.mediaUrl) {
+      delete (replyRecord as Record<string, unknown>).mediaUrl;
+      changed = true;
+    }
+    if (reply.mediaFileData && !reply.mediaId) {
+      const mediaId = await migrateMediaRecord(reply.mediaFileData, reply.mediaMimeType, reply.fileName);
+      if (mediaId) {
+        reply.mediaId = mediaId;
+        reply.mediaFileData = undefined;
+        reply.mediaMimeType = undefined;
+        changed = true;
+      }
+    }
+  }
+  return changed;
+};
 
 
 
@@ -230,11 +284,9 @@ const init = async () => {
   const quickReplyMessageInput = root.querySelector<HTMLTextAreaElement>("#zop-quickreply-message");
   const quickReplyVariablesInput = root.querySelector<HTMLInputElement>("#zop-quickreply-variables");
   const quickReplyTypeInput = root.querySelector<HTMLSelectElement>("#zop-quickreply-type");
-  const quickReplyMediaUrlInput = root.querySelector<HTMLInputElement>("#zop-quickreply-media-url");
   const quickReplyMediaCaptionInput = root.querySelector<HTMLInputElement>("#zop-quickreply-media-caption");
   const quickReplyFileNameInput = root.querySelector<HTMLInputElement>("#zop-quickreply-file-name");
   const quickReplyMediaSection = root.querySelector<HTMLElement>("#zop-quickreply-media");
-  const quickReplyMediaSourceInput = root.querySelector<HTMLSelectElement>("#zop-quickreply-media-source");
   const quickReplyMediaFileInput = root.querySelector<HTMLInputElement>("#zop-quickreply-media-file");
   const quickReplyMediaFileLabel = root.querySelector<HTMLElement>("#zop-quickreply-media-file-label");
   const quickReplyBusinessTagsInput = root.querySelector<HTMLInputElement>("#zop-quickreply-business-tags");
@@ -258,10 +310,7 @@ const init = async () => {
   let activeFunnel = createEmptyFunnel();
   let activeQuickReplyId: string | null = null;
   const payloadDrafts = new Map<string, string>();
-  const quickReplyMediaCache = new Map<
-    string,
-    { mediaFileData?: string; mediaMimeType?: string; fileName?: string }
-  >();
+  const quickReplyMediaCache = new Map<string, { mediaId?: string; fileName?: string }>();
   let draggedStepId: string | null = null;
   let dropTargetElement: HTMLElement | null = null;
 
@@ -324,21 +373,12 @@ const init = async () => {
       : "Nenhum arquivo selecionado";
   };
 
-  const applyQuickReplyMediaSource = (source: MediaSource) => {
-    if (!quickReplyMediaSection) {
-      return;
-    }
-    quickReplyMediaSection.dataset.source = source;
-  };
-
   const updateQuickReplyMediaVisibility = () => {
     const hasMedia = (quickReplyTypeInput?.value ?? "text") !== "text";
     if (quickReplyMediaSection) {
       quickReplyMediaSection.classList.toggle("is-active", hasMedia);
+      quickReplyMediaSection.dataset.source = "file";
     }
-    applyQuickReplyMediaSource(
-      (quickReplyMediaSourceInput?.value as MediaSource) ?? DEFAULT_MEDIA_SOURCE
-    );
   };
 
   const updateFunnelEditorTitle = () => {
@@ -411,7 +451,7 @@ const init = async () => {
       stepElement.className = "step";
       stepElement.dataset.stepId = step.id;
       stepElement.dataset.stepType = step.type;
-      stepElement.dataset.mediaSource = step.mediaSource ?? DEFAULT_MEDIA_SOURCE;
+      stepElement.dataset.mediaSource = "file";
       stepElement.draggable = true;
       stepElement.addEventListener("dragstart", () => {
         draggedStepId = step.id;
@@ -516,24 +556,6 @@ const init = async () => {
           </label>
         </div>
         <div class="step__group" data-group="media">
-          <div class="media__toolbar">
-            <label class="field field--small">
-              <span>Origem</span>
-              <select class="input input--small" data-field="mediaSource">
-                <option value="url">URL / Link</option>
-                <option value="file">Arquivo</option>
-              </select>
-            </label>
-          </div>
-          <label class="field media__field media__field--url">
-            <span>URL ou caminho do arquivo</span>
-            <input
-              class="input"
-              data-field="mediaUrl"
-              type="text"
-              placeholder="https://... ou caminho local"
-            />
-          </label>
           <label class="field media__field media__field--file">
             <span>Upload (mp3, mp4, png, pdf, docx)</span>
             <input
@@ -569,14 +591,7 @@ const init = async () => {
       if (typeSelect) {
         typeSelect.value = step.type;
       }
-      const mediaSourceSelect = stepElement.querySelector<HTMLSelectElement>(
-        "select[data-field='mediaSource']"
-      );
-      const resolvedMediaSource = step.mediaSource ?? DEFAULT_MEDIA_SOURCE;
-      if (mediaSourceSelect) {
-        mediaSourceSelect.value = resolvedMediaSource;
-      }
-      stepElement.dataset.mediaSource = resolvedMediaSource;
+      stepElement.dataset.mediaSource = "file";
 
       const textArea = stepElement.querySelector<HTMLTextAreaElement>("textarea[data-field='text']");
       if (textArea) {
@@ -612,10 +627,6 @@ const init = async () => {
         payloadInput.value = payloadText;
       }
 
-      const mediaUrlInput = stepElement.querySelector<HTMLInputElement>("input[data-field='mediaUrl']");
-      if (mediaUrlInput) {
-        mediaUrlInput.value = step.mediaUrl ?? "";
-      }
 
       const mediaCaptionInput = stepElement.querySelector<HTMLInputElement>("input[data-field='mediaCaption']");
       if (mediaCaptionInput) {
@@ -676,8 +687,7 @@ const init = async () => {
 
     if (reply) {
       quickReplyMediaCache.set(reply.id, {
-        mediaFileData: reply.mediaFileData,
-        mediaMimeType: reply.mediaMimeType,
+        mediaId: reply.mediaId,
         fileName: reply.fileName
       });
     } else {
@@ -699,12 +709,6 @@ const init = async () => {
     if (quickReplyVariablesInput) {
       quickReplyVariablesInput.value = reply?.variables?.join(", ") ?? "";
     }
-    if (quickReplyMediaSourceInput) {
-      quickReplyMediaSourceInput.value = reply?.mediaSource ?? DEFAULT_MEDIA_SOURCE;
-    }
-    if (quickReplyMediaUrlInput) {
-      quickReplyMediaUrlInput.value = reply?.mediaUrl ?? "";
-    }
     if (quickReplyMediaCaptionInput) {
       quickReplyMediaCaptionInput.value = reply?.mediaCaption ?? "";
     }
@@ -714,14 +718,10 @@ const init = async () => {
 
     const stage = ensureQuickReplyMediaStage();
     if (reply) {
-      if (!stage.mediaFileData && reply.mediaFileData) {
-        stage.mediaFileData = reply.mediaFileData;
-        stage.mediaMimeType = reply.mediaMimeType;
-      }
+      stage.mediaId = stage.mediaId ?? reply.mediaId ?? undefined;
       stage.fileName = stage.fileName ?? reply.fileName ?? "";
     } else {
-      stage.mediaFileData = undefined;
-      stage.mediaMimeType = undefined;
+      stage.mediaId = undefined;
       stage.fileName = undefined;
     }
 
@@ -817,7 +817,6 @@ const init = async () => {
 
     const normalizedSteps: FunnelStep[] = activeFunnel.steps.map((step) => {
       const tags = (step.addTags ?? []).map((tag) => tag.trim()).filter(Boolean);
-      const source = step.mediaSource ?? DEFAULT_MEDIA_SOURCE;
       const next: FunnelStep = {
         ...step,
         text: step.text?.trim() || undefined,
@@ -826,12 +825,12 @@ const init = async () => {
         addTags: tags.length ? tags : undefined,
         webhookEvent: step.webhookEvent?.trim() || undefined,
         payloadTemplate: undefined,
-        mediaSource: source,
-        mediaUrl: source === "url" ? step.mediaUrl?.trim() || undefined : undefined,
+        mediaSource: "file",
         mediaCaption: step.mediaCaption?.trim() || undefined,
         fileName: step.fileName?.trim() || undefined,
-        mediaFileData: source === "file" ? step.mediaFileData : undefined,
-        mediaMimeType: source === "file" ? step.mediaMimeType : undefined,
+        mediaId: step.mediaId,
+        mediaFileData: undefined,
+        mediaMimeType: undefined,
         mediaDurationMode: step.mediaDurationMode,
         mediaDurationSec: step.mediaDurationSec
       };
@@ -914,13 +913,10 @@ const init = async () => {
     const category = quickReplyCategoryInput.value.trim() || "Sem categoria";
     const variables = quickReplyVariablesInput ? parseList(quickReplyVariablesInput.value) : [];
     const mediaType = (quickReplyTypeInput?.value as QuickReply["mediaType"]) ?? "text";
-    const mediaSource = (quickReplyMediaSourceInput?.value as MediaSource) ?? DEFAULT_MEDIA_SOURCE;
     const stage = ensureQuickReplyMediaStage();
-    const mediaUrl = mediaSource === "url" ? quickReplyMediaUrlInput?.value.trim() || undefined : undefined;
     const mediaCaption = quickReplyMediaCaptionInput?.value.trim() || undefined;
     const fileName = quickReplyFileNameInput?.value.trim() || stage.fileName || undefined;
-    const mediaFileData = mediaSource === "file" ? stage.mediaFileData : undefined;
-    const mediaMimeType = mediaSource === "file" ? stage.mediaMimeType : undefined;
+    const mediaId = stage.mediaId;
     const businessTags = parseList(quickReplyBusinessTagsInput?.value ?? "");
     const now = Date.now();
 
@@ -935,12 +931,10 @@ const init = async () => {
       message,
       variables,
       mediaType,
-      mediaSource,
+      mediaSource: "file",
       mediaCaption,
-      mediaUrl,
       fileName,
-      mediaFileData,
-      mediaMimeType,
+      mediaId,
       businessTags: businessTags.length ? businessTags : undefined,
       updatedAt: now
     };
@@ -961,8 +955,7 @@ const init = async () => {
     }
 
     quickReplyMediaCache.set(saved.id, {
-      mediaFileData,
-      mediaMimeType,
+      mediaId,
       fileName
     });
     quickReplyMediaCache.delete(QUICK_REPLY_STAGE_KEY);
@@ -1063,6 +1056,9 @@ const init = async () => {
       ...(settingsRaw ?? {})
     };
 
+    await migrateFunnelsMedia(nextFunnels);
+    await migrateQuickRepliesMedia(nextReplies);
+
     await Promise.all([
       saveData(FUNNEL_STORAGE_KEY, nextFunnels),
       saveData(QUICK_REPLY_STORAGE_KEY, nextReplies),
@@ -1129,8 +1125,6 @@ const init = async () => {
       step.webhookEvent = (target as HTMLInputElement).value;
     } else if (field === "payloadTemplate") {
       payloadDrafts.set(step.id, (target as HTMLTextAreaElement).value);
-    } else if (field === "mediaUrl") {
-      step.mediaUrl = (target as HTMLInputElement).value;
     } else if (field === "mediaCaption") {
       step.mediaCaption = (target as HTMLInputElement).value;
     } else if (field === "fileName") {
@@ -1161,13 +1155,6 @@ const init = async () => {
       return;
     }
 
-    if (field === "mediaSource") {
-      const value = (target as HTMLSelectElement).value as MediaSource;
-      step.mediaSource = value;
-      stepElement.dataset.mediaSource = value;
-      return;
-    }
-
     if (field === "mediaDurationMode") {
       const value = (target as HTMLSelectElement).value as MediaDurationMode;
       step.mediaDurationMode = value;
@@ -1180,6 +1167,7 @@ const init = async () => {
       const fileInput = target as HTMLInputElement;
       const file = fileInput.files?.[0];
       if (!file) {
+        step.mediaId = undefined;
         step.mediaFileData = undefined;
         step.mediaMimeType = undefined;
         step.fileName = undefined;
@@ -1189,26 +1177,32 @@ const init = async () => {
         return;
       }
 
-      step.mediaSource = "file";
       step.fileName = file.name;
       const fileLabel = stepElement.querySelector<HTMLElement>("[data-field='mediaFileLabel']");
       if (fileLabel) {
         fileLabel.textContent = `Arquivo: ${file.name}`;
       }
 
-      void readFileAsDataUrl(file).then(async (result) => {
-        step.mediaFileData = result.data;
-        step.mediaMimeType = result.mimeType;
-        step.fileName = step.fileName ?? result.fileName;
-        updateStepFileLabel(stepElement, step.fileName);
+      void readFileAsDataUrl(file)
+        .then(async (result) => {
+          const mediaId = await putMedia(result.data, result.mimeType, result.fileName);
+          step.mediaId = mediaId;
+          step.mediaFileData = undefined;
+          step.mediaMimeType = undefined;
+          step.fileName = step.fileName ?? result.fileName;
+          updateStepFileLabel(stepElement, step.fileName);
 
-        if (["audio", "ptt", "video"].includes(step.type)) {
-          const kind = step.type === "video" ? "video" : "audio";
-          const duration = await estimateMediaDuration(result.data, kind);
-          step.mediaDurationSec = duration || undefined;
-          updateStepDurationHint(stepElement, step, step.mediaDurationMode ?? DEFAULT_MEDIA_DURATION_MODE);
-        }
-      });
+          if (["audio", "ptt", "video"].includes(step.type)) {
+            const kind = step.type === "video" ? "video" : "audio";
+            const duration = await estimateMediaDuration(result.data, kind);
+            step.mediaDurationSec = duration || undefined;
+            updateStepDurationHint(stepElement, step, step.mediaDurationMode ?? DEFAULT_MEDIA_DURATION_MODE);
+          }
+        })
+        .catch((error) => {
+          console.error("[ZOP][MEDIA] Falha ao salvar arquivo", error);
+          setStatus("Falha ao salvar arquivo no banco local.", "error");
+        });
       return;
     }
   });
@@ -1264,30 +1258,29 @@ const init = async () => {
   quickReplyTypeInput?.addEventListener("change", () => {
     updateQuickReplyMediaVisibility();
   });
-  quickReplyMediaSourceInput?.addEventListener("change", () => {
-    const source = (quickReplyMediaSourceInput.value as MediaSource) ?? DEFAULT_MEDIA_SOURCE;
-    applyQuickReplyMediaSource(source);
-    updateQuickReplyMediaVisibility();
-  });
   quickReplyMediaFileInput?.addEventListener("change", () => {
     const file = quickReplyMediaFileInput.files?.[0];
     const stage = ensureQuickReplyMediaStage();
     if (!file) {
-      stage.mediaFileData = undefined;
-      stage.mediaMimeType = undefined;
+      stage.mediaId = undefined;
       stage.fileName = undefined;
       updateQuickReplyMediaPreview();
       return;
     }
-    void readFileAsDataUrl(file).then((fileData) => {
-      stage.mediaFileData = fileData.data;
-      stage.mediaMimeType = fileData.mimeType;
-      stage.fileName = fileData.fileName;
-      if (quickReplyFileNameInput) {
-        quickReplyFileNameInput.value = fileData.fileName;
-      }
-      updateQuickReplyMediaPreview();
-    });
+    void readFileAsDataUrl(file)
+      .then(async (fileData) => {
+        const mediaId = await putMedia(fileData.data, fileData.mimeType, fileData.fileName);
+        stage.mediaId = mediaId;
+        stage.fileName = fileData.fileName;
+        if (quickReplyFileNameInput) {
+          quickReplyFileNameInput.value = fileData.fileName;
+        }
+        updateQuickReplyMediaPreview();
+      })
+      .catch((error) => {
+        console.error("[ZOP][MEDIA] Falha ao salvar arquivo", error);
+        setStatus("Falha ao salvar arquivo no banco local.", "error");
+      });
   });
   quickReplyFileNameInput?.addEventListener("input", () => {
     ensureQuickReplyMediaStage().fileName = quickReplyFileNameInput.value.trim() || undefined;
@@ -1321,6 +1314,15 @@ const init = async () => {
     ...DEFAULT_INTEGRATION_SETTINGS,
     ...(storedSettings ?? {})
   };
+
+  const migratedFunnels = await migrateFunnelsMedia(funnels);
+  const migratedReplies = await migrateQuickRepliesMedia(quickReplies);
+  if (migratedFunnels || migratedReplies) {
+    await Promise.all([
+      saveData(FUNNEL_STORAGE_KEY, funnels),
+      saveData(QUICK_REPLY_STORAGE_KEY, quickReplies)
+    ]);
+  }
 
   setActiveFunnel(funnels[0] ?? createEmptyFunnel());
   setActiveQuickReply(quickReplies[0] ?? null);
