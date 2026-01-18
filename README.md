@@ -53,6 +53,25 @@ pnpm lint
 4. Use o handle ou `Ctrl+Shift+Y` para recolher/abrir.
 5. Selecione uma conversa e clique em uma etapa do funil para salvar.
 
+## Testes de delay (manual)
+
+```ts
+// Exemplos de validacao rapida do parser de delays (resultado em segundos).
+// Ajuste o caminho do import conforme o seu ambiente.
+import { resolveDelaySec } from "./src/shared/delay";
+
+const delayRand = resolveDelaySec({ delayExpr: "rand(5,10)" });
+// Exemplo de saida: 7 (segundos)
+
+const delayRange = resolveDelaySec({ delayExpr: "8..12" });
+// Exemplo de saida: 9 (segundos)
+
+const delayFixed = resolveDelaySec({ delayExpr: "15" });
+// Resultado esperado: 15 (segundos)
+
+console.log({ delayRand, delayRange, delayFixed });
+```
+
 ## Estrutura
 
 ```
