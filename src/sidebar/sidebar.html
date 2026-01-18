@@ -1,0 +1,267 @@
+<div class="zop-shell">
+  <button class="zop-handle" id="zop-toggle" type="button" aria-expanded="true" aria-controls="zop-sidebar">
+    <span class="zop-handle__icon" aria-hidden="true"></span>
+    <span class="zop-handle__label">ZapOrganic</span>
+  </button>
+
+  <aside class="zop-sidebar" id="zop-sidebar" role="complementary" aria-label="ZapOrganic CRM Sidebar">
+    <header class="zop-header">
+      <div class="zop-brand">
+        <div class="zop-brand__identity">
+          <img class="zop-logo" id="zop-logo" alt="ZapOrganic" />
+          <div class="zop-brand__title">
+            <span class="zop-brand__zap">Zap</span>
+            <span class="zop-brand__organic">Organic</span>
+          </div>
+        </div>
+        <span class="zop-badge">PRO</span>
+      </div>
+      <div class="zop-header__meta">
+        <span class="zop-pill" id="zop-wpp-status">WPP carregando</span>
+        <span class="zop-pill zop-pill--ghost">MVP 0.2</span>
+      </div>
+    </header>
+
+    <div class="zop-layout">
+      <nav class="zop-rail" aria-label="Navegacao ZapOrganic">
+        <button class="zop-rail__item is-active" type="button" data-panel="funis">
+          <span class="zop-rail__icon" data-icon="F"></span>
+          <span class="zop-rail__label">Funis</span>
+        </button>
+        <button class="zop-rail__item" type="button" data-panel="envios">
+          <span class="zop-rail__icon" data-icon="E"></span>
+          <span class="zop-rail__label">Envios</span>
+        </button>
+        <button class="zop-rail__item" type="button" data-panel="fluxos">
+          <span class="zop-rail__icon" data-icon="X"></span>
+          <span class="zop-rail__label">Fluxos</span>
+        </button>
+        <button class="zop-rail__item" type="button" data-panel="agenda">
+          <span class="zop-rail__icon" data-icon="A"></span>
+          <span class="zop-rail__label">Agenda</span>
+        </button>
+        <button class="zop-rail__item" type="button" data-panel="itens">
+          <span class="zop-rail__icon" data-icon="I"></span>
+          <span class="zop-rail__label">Itens</span>
+        </button>
+        <button class="zop-rail__item" type="button" data-panel="ajustes">
+          <span class="zop-rail__icon" data-icon="Z"></span>
+          <span class="zop-rail__label">Ajustes</span>
+        </button>
+        <button class="zop-rail__item" type="button" data-panel="backups">
+          <span class="zop-rail__icon" data-icon="B"></span>
+          <span class="zop-rail__label">Backups</span>
+        </button>
+      </nav>
+
+      <div class="zop-content">
+        <section class="zop-panel is-active" data-panel="funis">
+          <div class="zop-panel__header">
+            <div>
+              <div class="zop-panel__title">Funis</div>
+              <div class="zop-panel__subtitle">Organize conversas por funis</div>
+            </div>
+            <button class="zop-button" type="button">Novo funil</button>
+          </div>
+
+          <div class="zop-filters">
+            <label class="zop-input-wrap">
+              <span class="zop-input__icon">/</span>
+              <input class="zop-input" type="search" placeholder="Buscar funil ou etapa" />
+            </label>
+            <label class="zop-toggle">
+              <input type="checkbox" />
+              <span class="zop-toggle__track"></span>
+              <span class="zop-toggle__label">Apenas favoritos</span>
+            </label>
+          </div>
+
+          <div class="zop-quick">
+            <button class="zop-chip is-active" type="button">Funis</button>
+            <button class="zop-chip" type="button">Fluxos</button>
+            <button class="zop-chip" type="button">Audios</button>
+            <button class="zop-chip" type="button">Mensagens</button>
+            <button class="zop-chip" type="button">Midia</button>
+            <button class="zop-chip" type="button">Docs</button>
+          </div>
+
+          <div class="zop-funnel">
+            <div class="zop-funnel__active">
+              <div class="zop-funnel__label">Conversa ativa</div>
+              <div class="zop-funnel__chat" id="zop-active-chat">Nenhuma conversa selecionada</div>
+              <div class="zop-funnel__current">
+                Funil atual: <span id="zop-active-stage">Sem funil</span>
+              </div>
+              <div class="zop-funnel__actions">
+                <button class="zop-button zop-button--ghost" id="zop-refresh-chat" type="button">
+                  Atualizar conversa
+                </button>
+                <span class="zop-meta" id="zop-funnel-total">0 ativos</span>
+              </div>
+            </div>
+            <div class="zop-funnel__list" id="zop-funnel-list"></div>
+          </div>
+        </section>
+
+        <section class="zop-panel" data-panel="envios">
+          <div class="zop-panel__header">
+            <div>
+              <div class="zop-panel__title">Envios</div>
+              <div class="zop-panel__subtitle">Status de envios e automacoes</div>
+            </div>
+            <button class="zop-button zop-button--ghost" type="button">Atualizar</button>
+          </div>
+          <div class="zop-empty">
+            <div class="zop-empty__title">Nenhum envio ativo</div>
+            <div class="zop-empty__text">Disparos e funis em execucao aparecerao aqui.</div>
+          </div>
+        </section>
+
+        <section class="zop-panel" data-panel="fluxos">
+          <div class="zop-panel__header">
+            <div>
+              <div class="zop-panel__title">Fluxos</div>
+              <div class="zop-panel__subtitle">Experiencias automatizadas</div>
+            </div>
+            <button class="zop-button" type="button">Criar fluxo</button>
+          </div>
+          <div class="zop-list">
+            <button class="zop-list__item" type="button">
+              <span class="zop-list__title">Fluxo funil max</span>
+              <span class="zop-list__meta">Ativo</span>
+            </button>
+            <button class="zop-list__item" type="button">
+              <span class="zop-list__title">Acabar com fluxo</span>
+              <span class="zop-list__meta">Pausado</span>
+            </button>
+            <button class="zop-list__item" type="button">
+              <span class="zop-list__title">Falar com suporte</span>
+              <span class="zop-list__meta">Ativo</span>
+            </button>
+          </div>
+        </section>
+
+        <section class="zop-panel" data-panel="agenda">
+          <div class="zop-panel__header">
+            <div>
+              <div class="zop-panel__title">Agenda</div>
+              <div class="zop-panel__subtitle">Eventos e lembretes</div>
+            </div>
+            <button class="zop-button" type="button">Novo evento</button>
+          </div>
+          <div class="zop-empty">
+            <div class="zop-empty__title">Sem eventos hoje</div>
+            <div class="zop-empty__text">Conecte o calendario para sincronizar.</div>
+          </div>
+        </section>
+
+        <section class="zop-panel" data-panel="itens">
+          <div class="zop-panel__header">
+            <div>
+              <div class="zop-panel__title">Itens</div>
+              <div class="zop-panel__subtitle">Biblioteca de conteudos rapidos</div>
+            </div>
+            <button class="zop-button" type="button">Adicionar</button>
+          </div>
+          <div class="zop-list">
+            <button class="zop-list__item" type="button">
+              <span class="zop-list__title">Tabela MAX</span>
+              <span class="zop-list__meta">Midia</span>
+            </button>
+            <button class="zop-list__item" type="button">
+              <span class="zop-list__title">Audio funil brother</span>
+              <span class="zop-list__meta">Audio</span>
+            </button>
+            <button class="zop-list__item" type="button">
+              <span class="zop-list__title">Mensagem boas vindas</span>
+              <span class="zop-list__meta">Texto</span>
+            </button>
+          </div>
+        </section>
+
+        <section class="zop-panel" data-panel="ajustes">
+          <div class="zop-panel__header">
+            <div>
+              <div class="zop-panel__title">Ajustes</div>
+              <div class="zop-panel__subtitle">Preferencias e comportamento</div>
+            </div>
+          </div>
+          <div class="zop-card">
+            <div class="zop-card__title">Envio de itens</div>
+            <label class="zop-toggle">
+              <input type="checkbox" />
+              <span class="zop-toggle__track"></span>
+              <span class="zop-toggle__label">Perguntar ao enviar itens unicos</span>
+            </label>
+            <label class="zop-toggle">
+              <input type="checkbox" checked />
+              <span class="zop-toggle__track"></span>
+              <span class="zop-toggle__label">Perguntar ao enviar funis</span>
+            </label>
+            <label class="zop-toggle">
+              <input type="checkbox" checked />
+              <span class="zop-toggle__track"></span>
+              <span class="zop-toggle__label">Perguntar ao enviar fluxos</span>
+            </label>
+          </div>
+          <div class="zop-card">
+            <div class="zop-card__title">Aparencia</div>
+            <div class="zop-pill-group">
+              <button class="zop-pill is-active" type="button">Escuro</button>
+              <button class="zop-pill" type="button">Claro</button>
+              <button class="zop-pill" type="button">WhatsApp</button>
+            </div>
+          </div>
+        </section>
+
+        <section class="zop-panel" data-panel="backups">
+          <div class="zop-panel__header">
+            <div>
+              <div class="zop-panel__title">Backups</div>
+              <div class="zop-panel__subtitle">Proteja configuracoes e funis</div>
+            </div>
+            <button class="zop-button" type="button">Exportar tudo</button>
+          </div>
+
+          <div class="zop-backup-grid">
+            <div class="zop-card">
+              <div class="zop-card__title">Configuracoes</div>
+              <div class="zop-card__meta">Ultimo backup: hoje, 09:42</div>
+              <div class="zop-card__actions">
+                <button class="zop-button" type="button">Exportar</button>
+                <button class="zop-button zop-button--ghost" type="button">Importar</button>
+              </div>
+            </div>
+            <div class="zop-card">
+              <div class="zop-card__title">Funis</div>
+              <div class="zop-card__meta">Ultimo backup: ontem, 18:30</div>
+              <div class="zop-card__actions">
+                <button class="zop-button" type="button">Exportar</button>
+                <button class="zop-button zop-button--ghost" type="button">Importar</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="zop-card">
+            <div class="zop-card__title">Backup automatico</div>
+            <label class="zop-toggle">
+              <input type="checkbox" checked />
+              <span class="zop-toggle__track"></span>
+              <span class="zop-toggle__label">Ativar backup diario</span>
+            </label>
+            <label class="zop-toggle">
+              <input type="checkbox" />
+              <span class="zop-toggle__track"></span>
+              <span class="zop-toggle__label">Enviar backup para nuvem</span>
+            </label>
+          </div>
+        </section>
+      </div>
+    </div>
+
+    <footer class="zop-footer">
+      <div class="zop-footer__hint">Ctrl+Shift+Y para recolher</div>
+      <div class="zop-footer__tag">ZapOrganic MVP</div>
+    </footer>
+  </aside>
+</div>
