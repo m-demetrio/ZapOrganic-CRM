@@ -24,32 +24,77 @@
 
     <div class="zop-layout">
       <nav class="zop-rail" aria-label="Navegacao ZapOrganic">
+        <button class="zop-rail__logo" id="zop-rail-toggle" type="button" aria-label="Alternar sidebar">
+          <img class="zop-rail__logo-img" id="zop-logo-rail" alt="ZapOrganic" />
+        </button>
         <button class="zop-rail__item is-active" type="button" data-panel="funis">
-          <span class="zop-rail__icon" data-icon="F"></span>
+          <span class="zop-rail__icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" role="img" aria-hidden="true">
+              <path d="M4 5h16l-6.5 7.5v5.5l-3 1.5v-7L4 5z" />
+            </svg>
+          </span>
           <span class="zop-rail__label">Funis</span>
         </button>
         <button class="zop-rail__item" type="button" data-panel="envios">
-          <span class="zop-rail__icon" data-icon="E"></span>
+          <span class="zop-rail__icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" role="img" aria-hidden="true">
+              <path d="M4 12h12" />
+              <path d="M12 6l6 6-6 6" />
+            </svg>
+          </span>
           <span class="zop-rail__label">Envios</span>
         </button>
         <button class="zop-rail__item" type="button" data-panel="fluxos">
-          <span class="zop-rail__icon" data-icon="X"></span>
+          <span class="zop-rail__icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" role="img" aria-hidden="true">
+              <rect x="4" y="4" width="6" height="6" rx="1.5" />
+              <rect x="14" y="4" width="6" height="6" rx="1.5" />
+              <rect x="9" y="14" width="6" height="6" rx="1.5" />
+              <path d="M10 7h4M12 10v4" />
+            </svg>
+          </span>
           <span class="zop-rail__label">Fluxos</span>
         </button>
         <button class="zop-rail__item" type="button" data-panel="agenda">
-          <span class="zop-rail__icon" data-icon="A"></span>
+          <span class="zop-rail__icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" role="img" aria-hidden="true">
+              <rect x="4" y="5" width="16" height="15" rx="2" />
+              <path d="M8 3v4M16 3v4M4 9h16" />
+              <path d="M7 13h4M7 16h4M13 13h4M13 16h4" />
+            </svg>
+          </span>
           <span class="zop-rail__label">Agenda</span>
         </button>
         <button class="zop-rail__item" type="button" data-panel="itens">
-          <span class="zop-rail__icon" data-icon="I"></span>
+          <span class="zop-rail__icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" role="img" aria-hidden="true">
+              <rect x="4" y="4" width="7" height="7" rx="1.5" />
+              <rect x="13" y="4" width="7" height="7" rx="1.5" />
+              <rect x="4" y="13" width="7" height="7" rx="1.5" />
+              <rect x="13" y="13" width="7" height="7" rx="1.5" />
+            </svg>
+          </span>
           <span class="zop-rail__label">Itens</span>
         </button>
         <button class="zop-rail__item" type="button" data-panel="ajustes">
-          <span class="zop-rail__icon" data-icon="Z"></span>
+          <span class="zop-rail__icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" role="img" aria-hidden="true">
+              <path d="M5 6h14M5 12h14M5 18h14" />
+              <circle cx="9" cy="6" r="2" />
+              <circle cx="15" cy="12" r="2" />
+              <circle cx="11" cy="18" r="2" />
+            </svg>
+          </span>
           <span class="zop-rail__label">Ajustes</span>
         </button>
         <button class="zop-rail__item" type="button" data-panel="backups">
-          <span class="zop-rail__icon" data-icon="B"></span>
+          <span class="zop-rail__icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" role="img" aria-hidden="true">
+              <path d="M7 18a4 4 0 0 1-.6-7.96A5 5 0 0 1 16.8 8 3.5 3.5 0 0 1 18 15H7z" />
+              <path d="M12 11v7" />
+              <path d="M9.5 15.5L12 18l2.5-2.5" />
+            </svg>
+          </span>
           <span class="zop-rail__label">Backups</span>
         </button>
       </nav>

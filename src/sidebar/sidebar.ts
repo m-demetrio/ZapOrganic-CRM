@@ -214,16 +214,24 @@ export const mountSidebar = () => {
   };
 
   const logo = shadow.querySelector<HTMLImageElement>("#zop-logo");
+  const logoRail = shadow.querySelector<HTMLImageElement>("#zop-logo-rail");
   if (logo) {
     logo.src = chrome.runtime.getURL("logo-zaporganic.png");
+  }
+  if (logoRail) {
+    logoRail.src = chrome.runtime.getURL("logo-zaporganic.png");
   }
 
   let collapsed = true;
   setCollapsed(shell, collapsed, layout);
 
-  toggle.addEventListener("click", () => {
+  const toggleCollapsed = () => {
     collapsed = !collapsed;
     setCollapsed(shell, collapsed, layout);
+  };
+
+  toggle.addEventListener("click", () => {
+    toggleCollapsed();
   });
 
   document.addEventListener("keydown", (event) => {
@@ -232,8 +240,12 @@ export const mountSidebar = () => {
     }
 
     event.preventDefault();
-    collapsed = !collapsed;
-    setCollapsed(shell, collapsed, layout);
+    toggleCollapsed();
+  });
+
+  const railToggle = shadow.querySelector<HTMLButtonElement>("#zop-rail-toggle");
+  railToggle?.addEventListener("click", () => {
+    toggleCollapsed();
   });
 
   const { railItems, setActivePanel } = setupPanelNavigation(shadow);
