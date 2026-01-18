@@ -45,6 +45,12 @@ pnpm lint
 3. Clique em Load unpacked.
 4. Selecione a pasta `dist/`.
 
+## Pagina de configuracoes
+
+1. Abra a engrenagem na sidebar ou use `chrome://extensions` -> Detalhes -> Pagina de opcoes.
+2. Use as abas Funis, Respostas rapidas, Integracoes e Backups.
+3. Clique em Salvar para persistir no storage; a sidebar atualiza automaticamente.
+
 ## Validacao rapida
 
 1. Rode `pnpm dev` e confirme que `dist/` foi criado.
@@ -141,7 +147,7 @@ As estruturas principais ficam em `src/shared/schema.ts`:
 - `IntegrationSettings`: configuracoes do webhook (n8n) e delays padrao.
 
 Persistencia fica em `src/shared/storage.ts` usando `chrome.storage.local` (com fallback para `localStorage`).
-Existe `schemaVersion` para migracoes futuras e os dados serao exportaveis/importaveis em uma proxima etapa.
+Existe `schemaVersion` para migracoes futuras e os dados podem ser exportados/importados na pagina de configuracoes.
 
 ## WPP local
 

@@ -1,0 +1,232 @@
+<div class="app">
+  <header class="hero">
+    <div class="hero__brand">
+      <img class="hero__logo" src="/logo-zaporganic.png" alt="ZapOrganic" />
+      <div>
+        <div class="hero__title">ZapOrganic</div>
+        <div class="hero__subtitle">Configuracoes do CRM</div>
+      </div>
+    </div>
+    <div class="hero__meta">
+      <span class="status-pill" id="zop-status" aria-live="polite">Pronto</span>
+      <span class="status-pill status-pill--ghost">MVP 0.2</span>
+    </div>
+  </header>
+
+  <div class="layout">
+    <nav class="tabs" aria-label="Secoes">
+      <button class="tab is-active" type="button" data-panel="funis">Funis</button>
+      <button class="tab" type="button" data-panel="respostas">Respostas rapidas</button>
+      <button class="tab" type="button" data-panel="integracoes">Integracoes</button>
+      <button class="tab" type="button" data-panel="backups">Backups</button>
+    </nav>
+
+    <main class="panels">
+      <section class="panel is-active" data-panel="funis">
+        <div class="panel__header">
+          <div>
+            <div class="panel__title">Funis</div>
+            <div class="panel__subtitle">Crie funis com etapas de texto, delay, tags e webhook.</div>
+          </div>
+          <button class="button" id="zop-new-funnel" type="button">Novo funil</button>
+        </div>
+
+        <div class="grid grid--two">
+          <div class="card">
+            <div class="card__header">
+              <div>
+                <div class="card__title">Lista de funis</div>
+                <div class="card__subtitle">Selecione um funil para editar.</div>
+              </div>
+            </div>
+            <div class="list" id="zop-funnel-list"></div>
+            <div class="empty" id="zop-funnel-empty">
+              <div class="empty__title">Nenhum funil cadastrado</div>
+              <div class="empty__text">Crie um funil para comecar.</div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card__header">
+              <div>
+                <div class="card__title">Editor do funil</div>
+                <div class="card__subtitle" id="zop-funnel-editor-title">Novo funil</div>
+              </div>
+              <div class="card__actions">
+                <button class="button button--ghost" id="zop-delete-funnel" type="button" disabled>
+                  Excluir
+                </button>
+                <button class="button" id="zop-save-funnel" type="button">Salvar</button>
+              </div>
+            </div>
+
+            <div class="form">
+              <label class="field">
+                <span>Nome</span>
+                <input class="input" id="zop-funnel-name" type="text" placeholder="Ex: Pos-venda" />
+              </label>
+              <label class="field">
+                <span>Descricao</span>
+                <textarea
+                  class="input input--area"
+                  id="zop-funnel-description"
+                  rows="3"
+                  placeholder="Resumo do funil"
+                ></textarea>
+              </label>
+            </div>
+
+            <div class="steps">
+              <div class="steps__header">
+                <div>
+                  <div class="card__title">Etapas</div>
+                  <div class="card__subtitle">Adicione textos, delays, tags ou webhooks.</div>
+                </div>
+                <button class="button button--ghost" id="zop-add-step" type="button">Adicionar etapa</button>
+              </div>
+              <div class="steps__list" id="zop-steps-list"></div>
+              <div class="empty" id="zop-steps-empty">
+                <div class="empty__title">Sem etapas</div>
+                <div class="empty__text">Adicione a primeira etapa do funil.</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="panel" data-panel="respostas">
+        <div class="panel__header">
+          <div>
+            <div class="panel__title">Respostas rapidas</div>
+            <div class="panel__subtitle">Organize mensagens por categoria e variaveis.</div>
+          </div>
+          <button class="button" id="zop-new-quickreply" type="button">Nova resposta</button>
+        </div>
+        <div class="grid grid--two">
+          <div class="card">
+            <div class="card__header">
+              <div>
+                <div class="card__title">Lista de respostas</div>
+                <div class="card__subtitle">Clique para editar.</div>
+              </div>
+            </div>
+            <div class="list" id="zop-quickreply-list"></div>
+            <div class="empty" id="zop-quickreply-empty">
+              <div class="empty__title">Nenhuma resposta cadastrada</div>
+              <div class="empty__text">Crie uma resposta rapida para reutilizar.</div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card__header">
+              <div>
+                <div class="card__title">Editor de resposta</div>
+                <div class="card__subtitle" id="zop-quickreply-editor-title">Nova resposta</div>
+              </div>
+              <div class="card__actions">
+                <button class="button button--ghost" id="zop-delete-quickreply" type="button" disabled>
+                  Excluir
+                </button>
+                <button class="button" id="zop-save-quickreply" type="button">Salvar</button>
+              </div>
+            </div>
+
+            <div class="form">
+              <label class="field">
+                <span>Categoria</span>
+                <input
+                  class="input"
+                  id="zop-quickreply-category"
+                  type="text"
+                  placeholder="Ex: Boas-vindas"
+                />
+              </label>
+              <label class="field">
+                <span>Titulo</span>
+                <input class="input" id="zop-quickreply-title" type="text" placeholder="Ex: Primeiro contato" />
+              </label>
+              <label class="field">
+                <span>Mensagem</span>
+                <textarea
+                  class="input input--area"
+                  id="zop-quickreply-message"
+                  rows="5"
+                  placeholder="Digite a resposta rapida"
+                ></textarea>
+              </label>
+              <label class="field">
+                <span>Variaveis (separe por virgula)</span>
+                <input class="input" id="zop-quickreply-variables" type="text" placeholder="Ex: nome, empresa" />
+              </label>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="panel" data-panel="integracoes">
+        <div class="panel__header">
+          <div>
+            <div class="panel__title">Integracoes</div>
+            <div class="panel__subtitle">Configure o webhook do n8n e segredos.</div>
+          </div>
+          <button class="button" id="zop-save-integrations" type="button">Salvar</button>
+        </div>
+        <div class="card">
+          <div class="form">
+            <label class="field">
+              <span>URL do webhook n8n</span>
+              <input class="input" id="zop-n8n-url" type="url" placeholder="https://..." />
+            </label>
+            <label class="field">
+              <span>Secret do webhook</span>
+              <input class="input" id="zop-n8n-secret" type="password" placeholder="Opcional" />
+            </label>
+            <label class="toggle">
+              <input id="zop-enable-webhook" type="checkbox" />
+              <span class="toggle__track"></span>
+              <span class="toggle__label">Ativar envio de webhook</span>
+            </label>
+          </div>
+        </div>
+      </section>
+
+      <section class="panel" data-panel="backups">
+        <div class="panel__header">
+          <div>
+            <div class="panel__title">Backups</div>
+            <div class="panel__subtitle">Exporte ou importe funis, respostas e integracoes.</div>
+          </div>
+        </div>
+        <div class="grid grid--two">
+          <div class="card">
+            <div class="card__header">
+              <div>
+                <div class="card__title">Exportar configuracoes</div>
+                <div class="card__subtitle">Gera um JSON com todos os dados.</div>
+              </div>
+              <button class="button" id="zop-export-backup" type="button">Exportar JSON</button>
+            </div>
+            <div class="card__body">
+              <p class="muted">Guarde o arquivo para restaurar depois.</p>
+            </div>
+          </div>
+          <div class="card">
+            <div class="card__header">
+              <div>
+                <div class="card__title">Importar configuracoes</div>
+                <div class="card__subtitle">Substitui dados atuais.</div>
+              </div>
+              <button class="button button--ghost" id="zop-import-backup-trigger" type="button">
+                Selecionar arquivo
+              </button>
+            </div>
+            <div class="card__body">
+              <p class="muted">O JSON deve ter funis, respostas e integracoes.</p>
+              <input id="zop-import-backup" type="file" accept="application/json" hidden />
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+</div>

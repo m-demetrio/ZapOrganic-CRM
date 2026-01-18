@@ -11,6 +11,7 @@ const manifest = {
   action: {
     default_title: "ZapOrganic CRM"
   },
+  options_page: "options/options.html",
   content_scripts: [
     {
       matches: ["https://web.whatsapp.com/*"],
