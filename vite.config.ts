@@ -50,6 +50,9 @@ export default defineConfig(({ mode }) => {
       sourcemap: isDev,
       emptyOutDir: true,
       rollupOptions: {
+        input: {
+          options: "options/options.html"
+        },
         output: {
           entryFileNames: "assets/[name].js",
           chunkFileNames: "assets/[name].js",
