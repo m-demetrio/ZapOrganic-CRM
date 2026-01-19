@@ -87,7 +87,8 @@ const serializeChat = (chat) => {
   const name = chat.name || chat.formattedTitle || chat.contact?.name || chat.subject;
   return {
     id: rawId,
-    name
+    name,
+    isGroup: chat.isGroup ?? Boolean(chat?.groupMetadata)
   };
 };
 

@@ -17,6 +17,7 @@ const PIX_MODES = [
   { value: "PHONE", label: "Telefone" },
   { value: "EVP", label: "Chave aleatória" }
 ] as const;
+const PIX_GROUP_ERROR_MESSAGE = "PIX disponível apenas em chats individuais.";
 
 const PIX_COMPOSER_HOST_SELECTORS = [
   "#main > footer ._ak1r > div",
@@ -34,6 +35,7 @@ const createRequestId = () => `zop-${Date.now()}-${Math.random().toString(16).sl
 type ActiveChat = {
   id: string;
   name?: string;
+  isGroup?: boolean;
 };
 
 const requestPageBridge = <T = unknown>(
@@ -463,6 +465,10 @@ const openPixModal = async () => {
         setError("Abra um chat para enviar o PIX.");
         return;
       }
+      if (chat.isGroup) {
+        setError(PIX_GROUP_ERROR_MESSAGE);
+        return;
+      }
       const ok = await sendPixMessage(chat.id, mode, name, key);
       if (ok) {
         closeModal();
@@ -479,8 +485,15 @@ const openPixModal = async () => {
 
 let composerObserver: MutationObserver | null = null;
 
-const mountPixComposerButton = () => {
+const mountPixComposerButton = async () => {
   ensurePixStyles();
+  const existingButton = document.getElementById(PIX_BUTTON_ID);
+  const activeChat = await requestActiveChat();
+  if (activeChat?.isGroup) {
+    existingButton?.remove();
+    return;
+  }
+
   const host = locateComposerHost();
   if (!host) {
     return;
@@ -513,7 +526,7 @@ const startComposerObserver = () => {
     return;
   }
   composerObserver = new MutationObserver(() => {
-    mountPixComposerButton();
+    void mountPixComposerButton();
   });
   composerObserver.observe(document.body, { childList: true, subtree: true });
 };
@@ -544,7 +557,7 @@ const init = () => {
 
 const startExtension = () => {
   init();
-  mountPixComposerButton();
+  void mountPixComposerButton();
   startComposerObserver();
 };
 
