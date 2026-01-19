@@ -854,7 +854,7 @@ const syncChatBarPosition = () => {
 
   const hostRect = host.getBoundingClientRect();
   const footerRect = footer.getBoundingClientRect();
-  const insetLeft = Math.max(0, hostRect.left - footerRect.left);
+  const insetLeft = Math.max(0, footerRect.left - hostRect.left);
   const insetRight = Math.max(0, footerRect.right - hostRect.right);
   const availableWidth = hostRect.width - insetLeft - insetRight;
   panel.style.width = `${Math.max(0, availableWidth)}px`;

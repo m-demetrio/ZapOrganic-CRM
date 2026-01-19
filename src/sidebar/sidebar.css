@@ -53,7 +53,8 @@
   background: linear-gradient(180deg, var(--zop-bg) 0%, var(--zop-bg-deep) 100%);
   border-left: 1px solid rgba(158, 87, 248, 0.35);
   box-shadow: -24px 0 60px rgba(0, 0, 0, 0.45);
-  overflow: hidden;
+  overflow-x: hidden;
+  overflow-y: auto;
   transform: translateX(0);
   transition: width 0.35s ease, transform 0.35s ease, box-shadow 0.35s ease;
   animation: zop-intro 0.5s ease both;
