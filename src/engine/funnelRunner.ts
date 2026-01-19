@@ -610,6 +610,14 @@ const getSendFileTimeoutMs = (step: FunnelStep) => {
   }
 };
 
+const isMediaStepType = (step: FunnelStep) =>
+  step.type === "audio" ||
+  step.type === "ptt" ||
+  step.type === "ptv" ||
+  step.type === "image" ||
+  step.type === "video" ||
+  step.type === "file";
+
 const sendMediaStep = async (runId: string, chatId: string, step: FunnelStep) => {
   if (isCancelled(runId)) {
     return false;
@@ -780,7 +788,7 @@ const runFunnelSequence = async (runId: string, input: FunnelRunInput) => {
             activatePresence();
           }
 
-          if (delayMs > 0) {
+          if (delayMs > 0 && !isMediaStepType(step)) {
             await waitWithCancel(runId, delayMs);
           }
 
@@ -812,6 +820,9 @@ const runFunnelSequence = async (runId: string, input: FunnelRunInput) => {
             const sent = await sendMediaStep(runId, chatId, step);
             if (!sent && !state.cancelled) {
               throw new Error("media-unavailable");
+            }
+            if (!state.cancelled && !isPaused(runId) && delayMs > 0) {
+              await waitWithCancel(runId, delayMs);
             }
           }
         } finally {

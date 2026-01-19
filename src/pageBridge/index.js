@@ -16,6 +16,36 @@ const emitResponse = (id, payload) => {
   );
 };
 
+const withTimeout = (promise, ms) =>
+  new Promise((resolve) => {
+    let settled = false;
+    const timeoutId = window.setTimeout(() => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      resolve({ timedOut: true });
+    }, ms);
+
+    promise
+      .then((value) => {
+        if (settled) {
+          return;
+        }
+        settled = true;
+        window.clearTimeout(timeoutId);
+        resolve({ timedOut: false, value });
+      })
+      .catch((error) => {
+        if (settled) {
+          return;
+        }
+        settled = true;
+        window.clearTimeout(timeoutId);
+        resolve({ timedOut: false, error });
+      });
+  });
+
 const hasOwn = (target, key) => Object.prototype.hasOwnProperty.call(target, key);
 
 const getDetailValue = (detail, key) => {
@@ -196,11 +226,19 @@ const handleRequest = (event) => {
       return;
     }
 
-    Promise.resolve(wpp.chat.sendTextMessage(chatId, text, options))
-      .then((result) => emitResponse(detail.id, { ok: true, result }))
-      .catch((error) => {
-        emitResponse(detail.id, { ok: false, error: error?.message || String(error) });
-      });
+    withTimeout(Promise.resolve(wpp.chat.sendTextMessage(chatId, text, options)), 12000).then(
+      (outcome) => {
+        if (outcome.timedOut) {
+          emitResponse(detail.id, { ok: true, timeout: true });
+          return;
+        }
+        if (outcome.error) {
+          emitResponse(detail.id, { ok: false, error: outcome.error?.message || String(outcome.error) });
+          return;
+        }
+        emitResponse(detail.id, { ok: true, result: outcome.value });
+      }
+    );
     return;
   }
 
@@ -258,11 +296,36 @@ const handleRequest = (event) => {
       normalizedOptions.caption = caption;
     }
 
-    Promise.resolve(wpp.chat.sendFileMessage(chatId, file, normalizedOptions))
-      .then((result) => emitResponse(detail.id, { ok: true, result }))
-      .catch((error) => {
-        emitResponse(detail.id, { ok: false, error: error?.message || String(error) });
-      });
+    const resolveSendFileTimeout = (opts) => {
+      if (opts?.isPtv || opts?.type === "video") {
+        return 30000;
+      }
+      if (opts?.type === "audio") {
+        return 20000;
+      }
+      if (opts?.type === "image") {
+        return 20000;
+      }
+      if (opts?.type === "document" || opts?.type === "file") {
+        return 25000;
+      }
+      return 25000;
+    };
+
+    withTimeout(
+      Promise.resolve(wpp.chat.sendFileMessage(chatId, file, normalizedOptions)),
+      resolveSendFileTimeout(normalizedOptions)
+    ).then((outcome) => {
+      if (outcome.timedOut) {
+        emitResponse(detail.id, { ok: true, timeout: true });
+        return;
+      }
+      if (outcome.error) {
+        emitResponse(detail.id, { ok: false, error: outcome.error?.message || String(outcome.error) });
+        return;
+      }
+      emitResponse(detail.id, { ok: true, result: outcome.value });
+    });
     return;
   }
 
