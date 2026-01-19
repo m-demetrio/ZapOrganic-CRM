@@ -148,6 +148,7 @@ const sendMessageViaPageBridge = (
   dispatchBridgeRequestForRun<SendMessageResult>(runId, { type: "send-text", chatId, text, options });
 
 const PRESENCE_DURATION_MS = 15000;
+const PRESENCE_HOLD_DELAY_MS = 400;
 
 const markChatPresence = (chatId: string, type: "mark-composing" | "mark-recording", value: boolean) => {
   if (value) {
@@ -785,14 +786,11 @@ const runFunnelSequence = async (runId: string, input: FunnelRunInput) => {
         };
 
         const shouldUsePresence = Boolean(presenceType) && (step.type !== "text" || Boolean(message));
+        const presenceHoldDelayMs = shouldUsePresence ? PRESENCE_HOLD_DELAY_MS : 0;
 
         try {
           if (shouldUsePresence) {
             activatePresence();
-          }
-
-          if (delayMs > 0 && !isMediaStepType(step)) {
-            await waitWithCancel(runId, delayMs);
           }
 
           if (state.cancelled) {
@@ -828,12 +826,15 @@ const runFunnelSequence = async (runId: string, input: FunnelRunInput) => {
             if (!sent && !state.cancelled) {
               throw new Error("media-unavailable");
             }
-            if (!state.cancelled && !isPaused(runId) && delayMs > 0) {
-              await waitWithCancel(runId, delayMs);
-            }
           }
         } finally {
+          if (!state.cancelled && presenceHoldDelayMs > 0) {
+            await waitWithCancel(runId, presenceHoldDelayMs);
+          }
           deactivatePresence();
+        }
+        if (!state.cancelled && !isPaused(runId) && delayMs > 0) {
+          await waitWithCancel(runId, delayMs);
         }
       } else {
         warn("Unknown step type", step.type);
