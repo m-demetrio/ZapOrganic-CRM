@@ -25,6 +25,11 @@ type PageBridgeResponse<T> = {
 
 const createRequestId = () => `zop-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 
+type ActiveChat = {
+  id: string;
+  name?: string;
+};
+
 const requestPageBridge = <T = unknown>(
   detail: Record<string, unknown>,
   timeoutMs = 15000
@@ -64,6 +69,8 @@ const requestPageBridge = <T = unknown>(
     }, timeoutMs);
   });
 };
+
+const requestActiveChat = () => requestPageBridge<ActiveChat | null>({ type: "active-chat" }, 5000);
 
 const exposePageBridge = () => {
   const target = window as Window &
@@ -266,10 +273,10 @@ const ensurePixStyles = () => {
   document.head?.appendChild(style);
 };
 
-const sendPixMessage = async (mode: string, name: string, key: string) => {
+const sendPixMessage = async (chatId: string, mode: string, name: string, key: string) => {
   console.log("[ZOP][PIX] send request");
   const response = await requestPageBridge<{ ok?: boolean; error?: string }>(
-    { type: "send-pix", mode, name, key },
+    { type: "send-pix", chatId, keyType: mode, key, name, instructions: "" },
     12000
   );
   if (response?.ok) {
@@ -427,11 +434,23 @@ const openPixModal = async () => {
 
     persistName();
     persistMode(mode);
-    const ok = await sendPixMessage(mode, name, key);
-    if (ok) {
-      closeModal();
-    } else {
-      setError("Falha ao enviar PIX.");
+
+    try {
+      const chat = await requestActiveChat();
+      if (!chat?.id) {
+        setError("Abra um chat para enviar o PIX.");
+        return;
+      }
+      const ok = await sendPixMessage(chat.id, mode, name, key);
+      if (ok) {
+        closeModal();
+      } else {
+        setError("Falha ao enviar PIX.");
+      }
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : typeof error === "string" ? error : "Falha ao enviar PIX.";
+      setError(message);
     }
   });
 };
@@ -498,8 +517,14 @@ const init = () => {
   exposeFunnelRunner();
 };
 
-if (document.readyState === "loading") {
-  document.addEventListener("DOMContentLoaded", init, { once: true });
-} else {
+const startExtension = () => {
   init();
+  mountPixComposerButton();
+  startComposerObserver();
+};
+
+if (document.readyState === "loading") {
+  document.addEventListener("DOMContentLoaded", startExtension, { once: true });
+} else {
+  startExtension();
 }
