@@ -45,6 +45,7 @@ type FunnelRunInput = {
 
 type FunnelRunState = {
   cancelled: boolean;
+  paused: boolean;
   error?: unknown;
 };
 
@@ -112,12 +113,30 @@ const dispatchBridgeRequest = async <T>(
   });
 };
 
+const dispatchBridgeRequestForRun = <T>(
+  runId: string,
+  detail: Record<string, unknown>,
+  timeoutMs = 15000
+): Promise<T | null> => {
+  const requestPromise = dispatchBridgeRequest<T>(detail, timeoutMs);
+  const cancelPromise = new Promise<T | null>((resolve) => {
+    const timer = window.setInterval(() => {
+      if (isCancelled(runId)) {
+        window.clearInterval(timer);
+        resolve(null);
+      }
+    }, 250);
+  });
+  return Promise.race([requestPromise, cancelPromise]);
+};
+
 const sendMessageViaPageBridge = (
+  runId: string,
   chatId: string,
   text: string,
   options?: Record<string, unknown>
 ): Promise<SendMessageResult | null> =>
-  dispatchBridgeRequest<SendMessageResult>({ type: "send-text", chatId, text, options });
+  dispatchBridgeRequestForRun<SendMessageResult>(runId, { type: "send-text", chatId, text, options });
 
 const PRESENCE_DURATION_MS = 15000;
 
@@ -286,12 +305,30 @@ export const onFinished = (listener: Listener<FunnelFinishedEvent>) =>
   addListener(listeners.finished, listener);
 
 const isCancelled = (runId: string) => runs.get(runId)?.cancelled ?? false;
+const isPaused = (runId: string) => runs.get(runId)?.paused ?? false;
 
 export const cancel = (runId: string) => {
   const state = runs.get(runId);
   if (state) {
     state.cancelled = true;
+    state.paused = false;
     log("Run cancelled", runId);
+  }
+};
+
+export const pause = (runId: string) => {
+  const state = runs.get(runId);
+  if (state) {
+    state.paused = true;
+    log("Run paused", runId);
+  }
+};
+
+export const resume = (runId: string) => {
+  const state = runs.get(runId);
+  if (state) {
+    state.paused = false;
+    log("Run resumed", runId);
   }
 };
 
@@ -332,9 +369,37 @@ const waitWithCancel = async (runId: string, delayMs: number) => {
   }
 
   await new Promise<void>((resolve) => {
-    const startedAt = Date.now();
+    let remaining = delayMs;
+    let lastTick = Date.now();
     const timer = window.setInterval(() => {
-      if (isCancelled(runId) || Date.now() - startedAt >= delayMs) {
+      if (isCancelled(runId)) {
+        window.clearInterval(timer);
+        resolve();
+        return;
+      }
+      const now = Date.now();
+      if (isPaused(runId)) {
+        lastTick = now;
+        return;
+      }
+      remaining -= now - lastTick;
+      lastTick = now;
+      if (remaining <= 0) {
+        window.clearInterval(timer);
+        resolve();
+      }
+    }, 250);
+  });
+};
+
+const waitWhilePaused = async (runId: string) => {
+  if (!isPaused(runId)) {
+    return;
+  }
+
+  await new Promise<void>((resolve) => {
+    const timer = window.setInterval(() => {
+      if (isCancelled(runId) || !isPaused(runId)) {
         window.clearInterval(timer);
         resolve();
       }
@@ -509,7 +574,7 @@ const getSendFileTimeoutMs = (step: FunnelStep) => {
   }
 };
 
-const sendMediaStep = async (chatId: string, step: FunnelStep) => {
+const sendMediaStep = async (runId: string, chatId: string, step: FunnelStep) => {
   const media = await resolveMediaPayload(step);
   if (!media) {
     warn("Skipping media step without source", step.id);
@@ -519,16 +584,23 @@ const sendMediaStep = async (chatId: string, step: FunnelStep) => {
   const caption = step.mediaCaption?.trim() || undefined;
   const timeoutMs = getSendFileTimeoutMs(step);
   const sendFile = (options: Record<string, unknown>) =>
-    dispatchBridgeRequest<SendMessageResult>({
-      type: "send-file",
-      chatId,
-      file: media.file,
-      options
-    }, timeoutMs);
+    dispatchBridgeRequestForRun<SendMessageResult>(
+      runId,
+      {
+        type: "send-file",
+        chatId,
+        file: media.file,
+        options
+      },
+      timeoutMs
+    );
 
   const primaryOptions = buildSendFileOptions(step, media, caption);
   const result = await sendFile(primaryOptions);
   if (!result) {
+    if (isCancelled(runId)) {
+      return false;
+    }
     warn("Send file timeout, continuing", step.id, step.type);
     return true;
   }
@@ -543,6 +615,9 @@ const sendMediaStep = async (chatId: string, step: FunnelStep) => {
         : buildSendFileOptions(step, media, caption);
     const fallback = await sendFile(fallbackOptions);
     if (!fallback) {
+      if (isCancelled(runId)) {
+        return false;
+      }
       warn("Send file timeout on retry, continuing", step.id, step.type);
       return true;
     }
@@ -550,6 +625,9 @@ const sendMediaStep = async (chatId: string, step: FunnelStep) => {
       const minimalOptions = stripSendFileOptions(fallbackOptions);
       const minimal = await sendFile(minimalOptions);
       if (!minimal) {
+        if (isCancelled(runId)) {
+          return false;
+        }
         warn("Send file timeout on minimal retry, continuing", step.id, step.type);
         return true;
       }
@@ -575,6 +653,11 @@ const runFunnelSequence = async (runId: string, input: FunnelRunInput) => {
   log("Run started", runId, funnel.id, chatId);
 
   for (let index = 0; index < funnel.steps.length; index += 1) {
+    if (state.cancelled) {
+      break;
+    }
+
+    await waitWhilePaused(runId);
     if (state.cancelled) {
       break;
     }
@@ -666,17 +749,28 @@ const runFunnelSequence = async (runId: string, input: FunnelRunInput) => {
             break;
           }
 
+          await waitWhilePaused(runId);
+          if (state.cancelled) {
+            break;
+          }
+
+          if (state.cancelled) {
+            break;
+          }
+
           if (step.type === "text") {
             if (!message) {
               warn("Skipping text step with empty message", step.id);
             } else {
-              const result = await sendMessageViaPageBridge(chatId, message);
-              if (!result?.ok) {
-                throw new Error(result?.error || "send-message-failed");
+              const result = await sendMessageViaPageBridge(runId, chatId, message);
+              if (!result) {
+                warn("Send text timeout, continuing", step.id);
+              } else if (!result.ok) {
+                throw new Error(result.error || "send-message-failed");
               }
             }
           } else {
-            await sendMediaStep(chatId, step);
+            await sendMediaStep(runId, chatId, step);
           }
         } finally {
           deactivatePresence();
@@ -720,7 +814,7 @@ const runFunnelSequence = async (runId: string, input: FunnelRunInput) => {
 
 export const runFunnel = (input: FunnelRunInput) => {
   const runId = createRunId();
-  runs.set(runId, { cancelled: false });
+  runs.set(runId, { cancelled: false, paused: false });
   void runFunnelSequence(runId, input);
   return runId;
 };
@@ -735,6 +829,8 @@ export const exposeFunnelRunner = () => {
       zopFunnelRunner?: {
         runFunnel: typeof runFunnel;
         cancel: typeof cancel;
+        pause: typeof pause;
+        resume: typeof resume;
         onStepStart: typeof onStepStart;
         onStepDone: typeof onStepDone;
         onError: typeof onError;
@@ -745,6 +841,8 @@ export const exposeFunnelRunner = () => {
   target.zopFunnelRunner = {
     runFunnel,
     cancel,
+    pause,
+    resume,
     onStepStart,
     onStepDone,
     onError,

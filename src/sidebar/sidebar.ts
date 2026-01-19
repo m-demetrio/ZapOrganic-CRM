@@ -53,6 +53,8 @@ type FunnelRunView = {
   statusDetailBase?: string;
   countdownEndAt?: number;
   countdownLabel?: string;
+  countdownRemainingSec?: number;
+  isPaused?: boolean;
   errorMessage?: string;
   updatedAt: number;
 };
@@ -407,6 +409,8 @@ export const mountSidebar = () => {
             integrationSettings: IntegrationSettings;
           }) => string;
           cancel: (runId: string) => void;
+          pause: (runId: string) => void;
+          resume: (runId: string) => void;
           onStepStart: (listener: (event: FunnelStepEvent) => void) => () => void;
           onStepDone: (listener: (event: FunnelStepEvent) => void) => () => void;
           onError: (listener: (event: FunnelErrorEvent) => void) => () => void;
@@ -439,6 +443,7 @@ export const mountSidebar = () => {
       run.currentStepIndex = event.stepIndex;
       run.currentStep = event.step;
       run.status = "running";
+      run.isPaused = false;
       run.statusDetailBase = `${formatStepType(event.step)} em andamento`;
       run.statusDetail = formatDelayStatus(event.step, event.resolvedDelaySec) || run.statusDetailBase;
       if (event.resolvedDelaySec && event.resolvedDelaySec > 0) {
@@ -468,8 +473,10 @@ export const mountSidebar = () => {
       run.currentStep = event.step;
       run.statusDetail = `${formatStepType(event.step)} concluida`;
       run.statusDetailBase = undefined;
+      run.isPaused = false;
       run.countdownEndAt = undefined;
       run.countdownLabel = undefined;
+      run.countdownRemainingSec = undefined;
       run.updatedAt = Date.now();
       renderRuns();
     });
@@ -484,8 +491,10 @@ export const mountSidebar = () => {
       run.errorMessage = event.error ? String(event.error) : "Erro desconhecido";
       run.statusDetail = run.errorMessage;
       run.statusDetailBase = undefined;
+      run.isPaused = false;
       run.countdownEndAt = undefined;
       run.countdownLabel = undefined;
+      run.countdownRemainingSec = undefined;
       run.updatedAt = Date.now();
       renderRuns();
     });
@@ -507,8 +516,10 @@ export const mountSidebar = () => {
         run.statusDetail = run.errorMessage || "Erro";
       }
       run.statusDetailBase = undefined;
+      run.isPaused = false;
       run.countdownEndAt = undefined;
       run.countdownLabel = undefined;
+      run.countdownRemainingSec = undefined;
       renderRuns();
     });
   };
@@ -660,13 +671,15 @@ export const mountSidebar = () => {
       const stepLabel = run.currentStep ? formatStepType(run.currentStep) : "Aguardando";
       const statusClass = `zop-run__status--${run.status}`;
       const statusLabel =
-        run.status === "running"
-          ? "ativo"
-          : run.status === "completed"
-            ? "finalizado"
-            : run.status === "cancelled"
-              ? "cancelado"
-              : "erro";
+        run.isPaused
+          ? "pausado"
+          : run.status === "running"
+            ? "ativo"
+            : run.status === "completed"
+              ? "finalizado"
+              : run.status === "cancelled"
+                ? "cancelado"
+                : "erro";
       const card = document.createElement("div");
       card.className = "zop-run-card";
       card.innerHTML = `
@@ -686,7 +699,12 @@ export const mountSidebar = () => {
         </div>
         <div class="zop-run-actions">
           <span class="zop-run-meta">${run.completedSteps}/${run.totalSteps} etapas</span>
-          <button class="zop-button zop-button--ghost" type="button" data-run-id="${run.runId}" ${
+          <button class="zop-button zop-button--ghost" type="button" data-action="pause" data-run-id="${run.runId}" ${
+            run.status !== "running" ? "disabled" : ""
+          }>
+            ${run.isPaused ? "Retomar" : "Pausar"}
+          </button>
+          <button class="zop-button zop-button--ghost" type="button" data-action="cancel" data-run-id="${run.runId}" ${
             run.status !== "running" ? "disabled" : ""
           }>
             Cancelar
@@ -694,10 +712,43 @@ export const mountSidebar = () => {
         </div>
       `;
 
-      const cancelButton = card.querySelector<HTMLButtonElement>("button[data-run-id]");
+      const pauseButton = card.querySelector<HTMLButtonElement>("button[data-action='pause'][data-run-id]");
+      pauseButton?.addEventListener("click", () => {
+        const runner = getFunnelRunner();
+        if (!runner) {
+          return;
+        }
+        run.isPaused = !run.isPaused;
+        if (run.isPaused) {
+          if (run.countdownEndAt) {
+            run.countdownRemainingSec = Math.max(
+              0,
+              Math.ceil((run.countdownEndAt - Date.now()) / 1000)
+            );
+          }
+          run.countdownEndAt = undefined;
+          run.statusDetailBase = run.statusDetailBase ?? run.statusDetail;
+          run.statusDetail = "Pausado";
+          runner.pause(run.runId);
+        } else {
+          if (run.countdownRemainingSec && run.countdownRemainingSec > 0) {
+            run.countdownEndAt = Date.now() + run.countdownRemainingSec * 1000;
+          }
+          run.countdownRemainingSec = undefined;
+          run.statusDetail = run.statusDetailBase ?? run.statusDetail;
+          runner.resume(run.runId);
+        }
+        renderRuns();
+      });
+
+      const cancelButton = card.querySelector<HTMLButtonElement>("button[data-action='cancel'][data-run-id]");
       cancelButton?.addEventListener("click", () => {
         const runner = getFunnelRunner();
+        run.isPaused = false;
+        run.countdownEndAt = undefined;
+        run.countdownRemainingSec = undefined;
         runner?.cancel(run.runId);
+        renderRuns();
       });
 
       runsList.appendChild(card);
@@ -708,7 +759,7 @@ export const mountSidebar = () => {
     const now = Date.now();
     let changed = false;
     runs.forEach((run) => {
-      if (run.status !== "running" || !run.countdownEndAt) {
+      if (run.status !== "running" || run.isPaused || !run.countdownEndAt) {
         return;
       }
 
@@ -809,6 +860,7 @@ export const mountSidebar = () => {
       currentStepIndex: 0,
       status: "running",
       statusDetail: "Iniciando...",
+      isPaused: false,
       updatedAt: Date.now()
     });
     renderRuns();
