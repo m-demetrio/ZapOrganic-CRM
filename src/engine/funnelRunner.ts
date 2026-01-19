@@ -802,6 +802,14 @@ const runFunnelSequence = async (runId: string, input: FunnelRunInput) => {
             break;
           }
 
+          if (delayMs > 0) {
+            await waitWithCancel(runId, delayMs);
+            if (state.cancelled) {
+              break;
+            }
+          }
+
+          await waitWhilePaused(runId);
           if (state.cancelled) {
             break;
           }
@@ -832,9 +840,6 @@ const runFunnelSequence = async (runId: string, input: FunnelRunInput) => {
             await waitWithCancel(runId, presenceHoldDelayMs);
           }
           deactivatePresence();
-        }
-        if (!state.cancelled && !isPaused(runId) && delayMs > 0) {
-          await waitWithCancel(runId, delayMs);
         }
       } else {
         warn("Unknown step type", step.type);
