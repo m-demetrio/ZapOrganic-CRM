@@ -594,19 +594,21 @@ const stripSendFileOptions = (options: Record<string, unknown>) => {
 };
 
 const getSendFileTimeoutMs = (step: FunnelStep) => {
+  // Timeout para aguardar RESPOSTA do bridge (não o upload em si).
+  // O upload pode continuar em background quando noWait=true.
   switch (step.type) {
     case "video":
     case "ptv":
-      return 120000;
+      return 12000;
     case "audio":
     case "ptt":
-      return 60000;
+      return 10000;
     case "file":
-      return 90000;
+      return 12000;
     case "image":
-      return 45000;
+      return 8000;
     default:
-      return 30000;
+      return 8000;
   }
 };
 
@@ -637,7 +639,8 @@ const sendMediaStep = async (runId: string, chatId: string, step: FunnelStep) =>
         type: "send-file",
         chatId,
         file: media.file,
-        options
+        noWait: true,
+        options: { ...options, noWait: true }
       },
       timeoutMs
     );
@@ -818,6 +821,10 @@ const runFunnelSequence = async (runId: string, input: FunnelRunInput) => {
             }
           } else {
             const sent = await sendMediaStep(runId, chatId, step);
+            // Pequeno tempo para o WhatsApp processar a fila do envio de midia
+            if (!state.cancelled && !isPaused(runId)) {
+              await waitWithCancel(runId, 500);
+            }
             if (!sent && !state.cancelled) {
               throw new Error("media-unavailable");
             }

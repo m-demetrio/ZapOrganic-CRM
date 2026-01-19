@@ -226,6 +226,20 @@ const handleRequest = (event) => {
       return;
     }
 
+    const noWait = Boolean(getDetailValue(detail, "noWait")) || Boolean(options && typeof options === "object" && options.noWait);
+
+    if (noWait) {
+      try {
+        Promise.resolve(wpp.chat.sendTextMessage(chatId, text, options)).catch((error) => {
+          console.error("[ZOP][BRIDGE] send-text async error", error);
+        });
+        emitResponse(detail.id, { ok: true, queued: true });
+      } catch (error) {
+        emitResponse(detail.id, { ok: false, error: error?.message || String(error) });
+      }
+      return;
+    }
+
     withTimeout(Promise.resolve(wpp.chat.sendTextMessage(chatId, text, options)), 12000).then(
       (outcome) => {
         if (outcome.timedOut) {
@@ -295,6 +309,21 @@ const handleRequest = (event) => {
     if (caption && !normalizedOptions.caption) {
       normalizedOptions.caption = caption;
     }
+
+    const noWait = Boolean(getDetailValue(detail, "noWait")) || Boolean(normalizedOptions.noWait);
+
+    if (noWait) {
+      try {
+        Promise.resolve(wpp.chat.sendFileMessage(chatId, file, normalizedOptions)).catch((error) => {
+          console.error("[ZOP][BRIDGE] send-file async error", error);
+        });
+        emitResponse(detail.id, { ok: true, queued: true });
+      } catch (error) {
+        emitResponse(detail.id, { ok: false, error: error?.message || String(error) });
+      }
+      return;
+    }
+
 
     const resolveSendFileTimeout = (opts) => {
       if (opts?.isPtv || opts?.type === "video") {
