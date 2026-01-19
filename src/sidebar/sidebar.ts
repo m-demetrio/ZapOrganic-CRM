@@ -474,6 +474,37 @@ export const mountSidebar = () => {
     void openPixModal();
   });
 
+  const COMPOSER_SELECTOR = "#main > footer ._1oI7S > div, #main > footer ._3wpi1 > div, #main > footer ._3uMse > div, #main > footer ._3h5ME > div";
+  const ensureComposerButton = () => {
+    const hosts = Array.from(document.querySelectorAll<HTMLElement>(COMPOSER_SELECTOR));
+    hosts.forEach((host) => {
+      if (!host || host.querySelector("#zop-pix-inline")) {
+        return;
+      }
+      const button = document.createElement("button");
+      button.id = "zop-pix-inline";
+      button.type = "button";
+      button.title = "Enviar PIX";
+      button.textContent = "💸";
+      button.addEventListener("click", () => {
+        void openPixModal();
+      });
+      host.prepend(button);
+    });
+  };
+
+  let composerObserver: MutationObserver | null = null;
+  const startComposerObserver = () => {
+    composerObserver?.disconnect();
+    composerObserver = new MutationObserver(() => {
+      ensureComposerButton();
+    });
+    composerObserver.observe(document.body, { childList: true, subtree: true });
+  };
+
+  ensureComposerButton();
+  startComposerObserver();
+
   let collapsed = true;
   setCollapsed(shell, collapsed, layout);
 
