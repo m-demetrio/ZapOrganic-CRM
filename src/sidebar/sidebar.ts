@@ -1040,6 +1040,44 @@ export const mountSidebar = () => {
     });
   };
 
+  type ChatBarRunDetail = {
+    runId: string;
+    funnelId: string;
+    funnelName?: string;
+    chatId: string;
+    chatName?: string;
+    totalSteps: number;
+  };
+
+  const addRunEntryFromChatBar = (detail: ChatBarRunDetail) => {
+    if (runs.has(detail.runId)) {
+      return;
+    }
+
+    runs.set(detail.runId, {
+      runId: detail.runId,
+      funnelId: detail.funnelId,
+      funnelName: detail.funnelName ?? "Funil",
+      chatId: detail.chatId,
+      chatName: detail.chatName,
+      totalSteps: detail.totalSteps,
+      completedSteps: 0,
+      currentStepIndex: 0,
+      status: "running",
+      statusDetail: "Iniciando...",
+      isPaused: false,
+      updatedAt: Date.now()
+    });
+    renderRuns();
+  };
+
+  window.addEventListener("zop:chat-bar-run", (event) => {
+    const detail = (event as CustomEvent<ChatBarRunDetail>).detail;
+    if (detail) {
+      addRunEntryFromChatBar(detail);
+    }
+  });
+
   const updateCountdowns = () => {
     const now = Date.now();
     let changed = false;

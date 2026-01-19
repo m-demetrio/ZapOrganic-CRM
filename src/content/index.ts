@@ -1,5 +1,7 @@
 import { mountSidebar } from "../sidebar/sidebar";
 import { exposeFunnelRunner } from "../engine/funnelRunner";
+import { loadData } from "../shared/storage";
+import type { Funnel, IntegrationSettings, LeadCard, QuickReply } from "../shared/schema";
 
 const WPP_SCRIPT_PATH = "wppconnect-wa.js";
 const PAGE_BRIDGE_PATH = "src/pageBridge/index.js";
@@ -30,6 +32,23 @@ const CHAT_BAR_STYLE_ID = "zop-chat-bar-style";
 const CHAT_BAR_TYPE_BUTTON_ID = "zop-chat-bar-type-button";
 const CHAT_BAR_TYPE_MENU_ID = "zop-chat-bar-type-menu";
 const CHAT_BAR_TYPES = ["Textos", "Áudios", "Imagens", "Vídeos", "Funil", "Outros"] as const;
+const FUNNEL_STORAGE_KEY = "zopFunnels";
+const QUICK_REPLY_STORAGE_KEY = "zopQuickReplies";
+const SETTINGS_STORAGE_KEY = "zopIntegrationSettings";
+const DEFAULT_INTEGRATION_SETTINGS: IntegrationSettings = {
+  enableWebhook: false,
+  defaultDelaySec: 0
+};
+
+const [
+  CHAT_BAR_TYPE_TEXT,
+  CHAT_BAR_TYPE_AUDIO,
+  CHAT_BAR_TYPE_IMAGE,
+  CHAT_BAR_TYPE_VIDEO,
+  CHAT_BAR_TYPE_FUNNEL,
+  CHAT_BAR_TYPE_OTHER
+] = CHAT_BAR_TYPES;
+type ChatBarType = (typeof CHAT_BAR_TYPES)[number];
 
 type PageBridgeResponse<T> = {
   id: string;
@@ -302,6 +321,327 @@ const ensurePixStyles = () => {
   `;
   document.head?.appendChild(style);
 };
+
+let chatBarFunnels: Funnel[] = [];
+let chatBarQuickReplies: QuickReply[] = [];
+let chatBarIntegrationSettings: IntegrationSettings = DEFAULT_INTEGRATION_SETTINGS;
+let chatBarSearchQuery = "";
+let chatBarSelectedType: ChatBarType = CHAT_BAR_TYPE_FUNNEL;
+let chatBarListElement: HTMLElement | null = null;
+let chatBarStorageListenerBound = false;
+
+type FunnelRunner = {
+  runFunnel: (input: {
+    funnel: Funnel;
+    chatId: string;
+    lead: LeadCard;
+    integrationSettings: IntegrationSettings;
+  }) => string;
+};
+
+const CHAT_BAR_CARD_ICON = `
+  <svg viewBox="0 0 24 24" role="presentation" focusable="false">
+    <rect x="6" y="4" width="12" height="16" rx="2" stroke="currentColor" stroke-width="1.5" fill="none" />
+    <path d="M8 9h6M8 13h6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
+  </svg>
+`;
+
+const getFunnelRunner = (): FunnelRunner | null => {
+  const target = window as Window &
+    typeof globalThis & {
+      zopFunnelRunner?: FunnelRunner;
+    };
+
+  return target.zopFunnelRunner ?? null;
+};
+
+function createLeadFromChat(chat: ActiveChat): LeadCard {
+  return {
+    id: chat.id,
+    chatId: chat.id,
+    title: chat.name || chat.id,
+    laneId: "novo",
+    tags: [],
+    lastUpdateAt: Date.now()
+  };
+}
+
+function openOptionsPage() {
+  try {
+    if (chrome?.runtime?.openOptionsPage) {
+      chrome.runtime.openOptionsPage();
+      return;
+    }
+  } catch {
+    // fallback to manual URL if the API is unavailable
+  }
+
+  const fallbackUrl = chrome?.runtime?.getURL?.("options/options.html");
+  if (fallbackUrl) {
+    window.open(fallbackUrl, "_blank");
+  }
+}
+
+async function runFunnelForActiveChat(funnel: Funnel) {
+  const chat = await requestActiveChat();
+  if (!chat) {
+    console.warn("[ZOP][CHAT BAR] nenhum chat ativo");
+    return;
+  }
+
+  const runner = getFunnelRunner();
+  if (!runner) {
+    console.warn("[ZOP][CHAT BAR] runner indisponível");
+    return;
+  }
+
+  const lead = createLeadFromChat(chat);
+  const runId = runner.runFunnel({
+    funnel,
+    chatId: chat.id,
+    lead,
+    integrationSettings: chatBarIntegrationSettings
+  });
+
+  window.dispatchEvent(
+    new CustomEvent("zop:chat-bar-run", {
+      detail: {
+        runId,
+        funnelId: funnel.id,
+        funnelName: funnel.name,
+        chatId: chat.id,
+        chatName: chat.name,
+        totalSteps: Array.isArray(funnel.steps) ? funnel.steps.length : 0
+      }
+    })
+  );
+}
+
+async function insertQuickReply(reply: QuickReply) {
+  const chat = await requestActiveChat();
+  if (!chat) {
+    console.warn("[ZOP][CHAT BAR] nenhum chat ativo");
+    return;
+  }
+
+  await requestPageBridge({
+    type: "insert-text",
+    chatId: chat.id,
+    text: reply.message
+  });
+}
+
+async function sendQuickReply(reply: QuickReply) {
+  const chat = await requestActiveChat();
+  if (!chat) {
+    console.warn("[ZOP][CHAT BAR] nenhum chat ativo");
+    return;
+  }
+
+  await requestPageBridge({
+    type: "send-text",
+    chatId: chat.id,
+    text: reply.message
+  });
+}
+
+function getQuickReplyCategory(reply: QuickReply): ChatBarType {
+  switch (reply.mediaType) {
+    case "audio":
+    case "ptt":
+      return CHAT_BAR_TYPE_AUDIO;
+    case "image":
+      return CHAT_BAR_TYPE_IMAGE;
+    case "video":
+    case "ptv":
+      return CHAT_BAR_TYPE_VIDEO;
+    case "file":
+      return CHAT_BAR_TYPE_OTHER;
+    case "text":
+    default:
+      return CHAT_BAR_TYPE_TEXT;
+  }
+}
+
+function formatQuickReplyTypeLabel(type?: QuickReply["mediaType"]) {
+  switch (type) {
+    case "audio":
+      return "Áudio";
+    case "ptt":
+      return "PTT";
+    case "ptv":
+      return "PTV";
+    case "image":
+      return "Imagem";
+    case "video":
+      return "Vídeo";
+    case "file":
+      return "Arquivo";
+    default:
+      return "Texto";
+  }
+}
+
+function formatQuickReplyPreview(reply: QuickReply) {
+  const parts: string[] = [];
+  const normalized = reply.message?.trim().replace(/\s+/g, " ");
+  if (normalized) {
+    const capped = normalized.length > 60 ? `${normalized.slice(0, 57).trim()}...` : normalized;
+    parts.push(capped);
+  }
+  if (reply.fileName) {
+    parts.push(reply.fileName);
+  }
+  if (reply.businessTags && reply.businessTags.length > 0) {
+    parts.push(`Etiquetas: ${reply.businessTags.join(", ")}`);
+  }
+  return parts.length > 0 ? parts.join(" • ") : formatQuickReplyTypeLabel(reply.mediaType);
+}
+
+function matchesFunnel(funnel: Funnel, query: string) {
+  if (!query) {
+    return true;
+  }
+  const steps = Array.isArray(funnel.steps) ? funnel.steps : [];
+  const haystack = [funnel.name ?? "", funnel.description ?? "", ...steps.map((step) => `${step.type} ${step.text ?? ""}`)]
+    .join(" ")
+    .toLowerCase();
+  return haystack.includes(query);
+}
+
+function matchesQuickReply(reply: QuickReply, query: string) {
+  if (!query) {
+    return true;
+  }
+  const haystack = [
+    reply.title ?? "",
+    reply.message ?? "",
+    reply.categoryId ?? "",
+    formatQuickReplyTypeLabel(reply.mediaType),
+    (reply.businessTags ?? []).join(" ")
+  ]
+    .join(" ")
+    .toLowerCase();
+  return haystack.includes(query);
+}
+
+function renderChatBarList() {
+  const list = chatBarListElement;
+  if (!list) {
+    return;
+  }
+
+  const normalizedQuery = chatBarSearchQuery.trim().toLowerCase();
+  const isFunnelView = chatBarSelectedType === CHAT_BAR_TYPE_FUNNEL;
+  const matchedItems = (isFunnelView ? chatBarFunnels : chatBarQuickReplies)
+    .filter((item) => {
+      if (isFunnelView) {
+        return matchesFunnel(item as Funnel, normalizedQuery);
+      }
+      const reply = item as QuickReply;
+      return getQuickReplyCategory(reply) === chatBarSelectedType && matchesQuickReply(reply, normalizedQuery);
+    })
+    .map((item) => ({
+      type: isFunnelView ? ("funnel" as const) : ("quickReply" as const),
+      data: item
+    }));
+
+  list.innerHTML = "";
+
+  if (matchedItems.length === 0) {
+    const empty = document.createElement("div");
+    empty.className = "zop-chat-card-empty";
+    empty.textContent = isFunnelView ? "Nenhum funil encontrado" : "Nenhuma resposta encontrada";
+    list.appendChild(empty);
+    return;
+  }
+
+  matchedItems.forEach((item) => {
+    const card = document.createElement("article");
+    card.className = "zop-chat-card";
+    card.setAttribute("role", "group");
+
+    const icon = document.createElement("div");
+    icon.className = "zop-chat-card__icon";
+    icon.innerHTML = CHAT_BAR_CARD_ICON;
+
+    const content = document.createElement("div");
+    content.className = "zop-chat-card__content";
+
+    const titleEl = document.createElement("div");
+    titleEl.className = "zop-chat-card__title";
+
+    const subtitleEl = document.createElement("div");
+    subtitleEl.className = "zop-chat-card__subtitle";
+
+    const metaEl = document.createElement("div");
+    metaEl.className = "zop-chat-card__meta";
+
+    const actions = document.createElement("div");
+    actions.className = "zop-chat-card__actions";
+
+    const ghostButton = document.createElement("button");
+    ghostButton.className = "zop-chat-card__btn zop-chat-card__btn--ghost";
+    ghostButton.type = "button";
+
+    const primaryButton = document.createElement("button");
+    primaryButton.className = "zop-chat-card__btn";
+    primaryButton.type = "button";
+
+    if (item.type === "funnel") {
+      const { name, description, steps } = item.data as Funnel;
+      titleEl.textContent = name || "Funil sem nome";
+      subtitleEl.textContent = description || "Funil";
+      metaEl.textContent = `${Array.isArray(steps) ? steps.length : 0} etapas`;
+      ghostButton.textContent = "Visualizar";
+      ghostButton.addEventListener("click", openOptionsPage);
+      primaryButton.textContent = "Executar funil";
+      primaryButton.addEventListener("click", () => void runFunnelForActiveChat(item.data as Funnel));
+      card.setAttribute("aria-label", `Funil ${name || "sem nome"}`);
+    } else {
+      const quickReply = item.data as QuickReply;
+      titleEl.textContent = quickReply.title || "Resposta rápida";
+      subtitleEl.textContent = quickReply.categoryId || formatQuickReplyTypeLabel(quickReply.mediaType);
+      metaEl.textContent = formatQuickReplyPreview(quickReply);
+      ghostButton.textContent = "Inserir";
+      ghostButton.addEventListener("click", () => void insertQuickReply(quickReply));
+      primaryButton.textContent = "Enviar";
+      primaryButton.addEventListener("click", () => void sendQuickReply(quickReply));
+      card.setAttribute("aria-label", `Resposta rápida ${quickReply.title || ""}`.trim());
+    }
+
+    content.appendChild(titleEl);
+    content.appendChild(subtitleEl);
+    content.appendChild(metaEl);
+    actions.appendChild(ghostButton);
+    actions.appendChild(primaryButton);
+    card.appendChild(icon);
+    card.appendChild(content);
+    card.appendChild(actions);
+    list.appendChild(card);
+  });
+}
+
+async function loadChatBarData() {
+  try {
+    const [storedFunnels, storedQuickReplies, storedSettings] = await Promise.all([
+      loadData<Funnel[]>(FUNNEL_STORAGE_KEY, []),
+      loadData<QuickReply[]>(QUICK_REPLY_STORAGE_KEY, []),
+      loadData<IntegrationSettings>(SETTINGS_STORAGE_KEY, DEFAULT_INTEGRATION_SETTINGS)
+    ]);
+    chatBarFunnels = Array.isArray(storedFunnels) ? storedFunnels : [];
+    chatBarQuickReplies = Array.isArray(storedQuickReplies) ? storedQuickReplies : [];
+    chatBarIntegrationSettings = {
+      ...DEFAULT_INTEGRATION_SETTINGS,
+      ...(storedSettings ?? {})
+    };
+  } catch (error) {
+    console.warn("[ZOP][CHAT BAR] falha ao carregar dados", error);
+    chatBarFunnels = [];
+    chatBarQuickReplies = [];
+  }
+  renderChatBarList();
+}
 
 const sendPixMessage = async (chatId: string, mode: string, name: string, key: string) => {
   console.log("[ZOP][PIX] send request");
@@ -748,6 +1088,21 @@ const ensureChatBarStyles = () => {
       gap: 12px;
       box-shadow: 0 18px 40px rgba(0, 0, 0, 0.45);
     }
+    .zop-chat-card-empty {
+      flex: 1;
+      min-width: 260px;
+      border-radius: 18px;
+      padding: 18px;
+      border: 1px dashed rgba(255, 255, 255, 0.45);
+      background: rgba(255, 255, 255, 0.02);
+      color: rgba(255, 255, 255, 0.75);
+      font-size: 14px;
+      font-weight: 500;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+    }
     .zop-chat-card__icon {
       width: 52px;
       height: 52px;
@@ -985,8 +1340,10 @@ const setupChatBarInteractions = (panel: HTMLElement) => {
   const typeLabel = typeButton?.querySelector<HTMLElement>(".zop-chat-bar__type-label");
   const typeMenu = panel.querySelector<HTMLElement>(`#${CHAT_BAR_TYPE_MENU_ID}`);
   const cleanButton = panel.querySelector<HTMLButtonElement>(".zop-chat-bar__clean");
+  const listElement = panel.querySelector<HTMLElement>(".zop-chat-bar__list");
+  chatBarListElement = listElement ?? null;
 
-  if (!typeButton || !typeMenu || !typeLabel) {
+  if (!typeButton || !typeMenu || !typeLabel || !listElement) {
     return;
   }
 
@@ -994,6 +1351,11 @@ const setupChatBarInteractions = (panel: HTMLElement) => {
     typeMenu.classList.remove("is-open");
     typeButton.setAttribute("aria-expanded", "false");
   };
+
+  searchInput?.addEventListener("input", (event) => {
+    chatBarSearchQuery = (event.target as HTMLInputElement).value;
+    renderChatBarList();
+  });
 
   typeButton.addEventListener("click", (event) => {
     event.preventDefault();
@@ -1003,12 +1365,13 @@ const setupChatBarInteractions = (panel: HTMLElement) => {
 
   Array.from(typeMenu.querySelectorAll<HTMLButtonElement>(".zop-chat-bar__type-item")).forEach((item) => {
     item.addEventListener("click", () => {
-      const value = item.dataset.type?.trim() || item.textContent?.trim() || "";
-      if (value) {
-        typeLabel.textContent = value;
-        typeButton.dataset.selectedType = value;
-      }
+      const rawValue = item.dataset.type?.trim() || item.textContent?.trim() || "";
+      const value = CHAT_BAR_TYPES.includes(rawValue as ChatBarType) ? (rawValue as ChatBarType) : CHAT_BAR_TYPE_FUNNEL;
+      chatBarSelectedType = value;
+      typeLabel.textContent = value;
+      typeButton.dataset.selectedType = value;
       closeMenu();
+      renderChatBarList();
     });
   });
 
@@ -1024,9 +1387,26 @@ const setupChatBarInteractions = (panel: HTMLElement) => {
     if (searchInput) {
       searchInput.value = "";
     }
-    typeLabel.textContent = CHAT_BAR_TYPES[4];
-    typeButton.dataset.selectedType = CHAT_BAR_TYPES[4];
+    chatBarSearchQuery = "";
+    chatBarSelectedType = CHAT_BAR_TYPE_FUNNEL;
+    typeLabel.textContent = CHAT_BAR_TYPE_FUNNEL;
+    typeButton.dataset.selectedType = CHAT_BAR_TYPE_FUNNEL;
+    renderChatBarList();
   });
+
+  if (!chatBarStorageListenerBound && chrome?.storage?.onChanged) {
+    chrome.storage.onChanged.addListener((changes, area) => {
+      if (area !== "local") {
+        return;
+      }
+      if (changes[FUNNEL_STORAGE_KEY] || changes[QUICK_REPLY_STORAGE_KEY] || changes[SETTINGS_STORAGE_KEY]) {
+        void loadChatBarData();
+      }
+    });
+    chatBarStorageListenerBound = true;
+  }
+
+  void loadChatBarData();
 };
 
 const mountChatFunnelBar = () => {
