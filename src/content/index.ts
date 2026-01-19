@@ -18,6 +18,12 @@ const PIX_MODES = [
   { value: "EVP", label: "Chave aleatória" }
 ] as const;
 
+const PIX_COMPOSER_HOST_SELECTORS = [
+  "#main > footer ._ak1r > div",
+  "#main > footer > div > div",
+  "[data-testid='conversation-compose-box']"
+] as const;
+
 type PageBridgeResponse<T> = {
   id: string;
   payload?: T;
@@ -133,6 +139,18 @@ const setStoredPixPreferences = (updates: { name?: string; mode?: string }) => {
   } catch (error) {
     console.warn("[ZOP][PIX] storage error", error);
   }
+};
+
+const locateComposerHost = (): HTMLElement | null => {
+  for (const selector of PIX_COMPOSER_HOST_SELECTORS) {
+    const element = document.querySelector<HTMLElement>(selector);
+    if (element) {
+      return element;
+    }
+  }
+
+  const clipElement = document.querySelector<HTMLElement>("[data-icon='clip']");
+  return clipElement?.parentElement ?? null;
 };
 
 const ensurePixStyles = () => {
@@ -459,11 +477,7 @@ let composerObserver: MutationObserver | null = null;
 
 const mountPixComposerButton = () => {
   ensurePixStyles();
-  const attachButton = document.querySelector<HTMLButtonElement>("button[data-icon='clip']");
-  if (!attachButton) {
-    return;
-  }
-  const host = attachButton.parentElement;
+  const host = locateComposerHost();
   if (!host) {
     return;
   }
@@ -474,13 +488,20 @@ const mountPixComposerButton = () => {
   button.id = PIX_BUTTON_ID;
   button.type = "button";
   button.title = "Enviar PIX";
-  button.textContent = "🤑";
+  button.setAttribute("aria-label", "Enviar PIX");
   button.className = "zop-pix-inline-button";
+  button.textContent = "ÐYÏ'";
   button.addEventListener("click", () => {
     console.log("[ZOP][PIX] mount button ok");
     void openPixModal();
   });
-  host.insertBefore(button, attachButton);
+
+  const clipElement = host.querySelector<HTMLElement>("[data-icon='clip']");
+  if (clipElement && host.contains(clipElement)) {
+    host.insertBefore(button, clipElement);
+    return;
+  }
+  host.prepend(button);
 };
 
 const startComposerObserver = () => {
