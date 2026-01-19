@@ -118,16 +118,25 @@ const dispatchBridgeRequestForRun = <T>(
   detail: Record<string, unknown>,
   timeoutMs = 15000
 ): Promise<T | null> => {
-  const requestPromise = dispatchBridgeRequest<T>(detail, timeoutMs);
-  const cancelPromise = new Promise<T | null>((resolve) => {
-    const timer = window.setInterval(() => {
+  return new Promise<T | null>((resolve) => {
+    const requestPromise = dispatchBridgeRequest<T>(detail, timeoutMs);
+    const cancelTimer = window.setInterval(() => {
       if (isCancelled(runId)) {
-        window.clearInterval(timer);
+        window.clearInterval(cancelTimer);
         resolve(null);
       }
     }, 250);
+
+    requestPromise
+      .then((result) => {
+        window.clearInterval(cancelTimer);
+        resolve(result);
+      })
+      .catch(() => {
+        window.clearInterval(cancelTimer);
+        resolve(null);
+      });
   });
-  return Promise.race([requestPromise, cancelPromise]);
 };
 
 const sendMessageViaPageBridge = (
@@ -170,20 +179,42 @@ const requestMediaFromExtension = async (id: string) => {
     const chunks: string[] = [];
     let meta: { id: string; mimeType?: string; fileName?: string } | null = null;
 
-    const port = chrome.runtime.connect({ name: "zop:media:stream" });
+    let port: chrome.runtime.Port | null = null;
+    try {
+      port = chrome.runtime.connect({ name: "zop:media:stream" });
+    } catch (error) {
+      logError("Failed to connect to media stream", error);
+      resolve(null);
+      return;
+    }
 
     const finish = (record: { id: string; dataUrl: string; mimeType?: string; fileName?: string } | null) => {
       if (completed) {
         return;
       }
       completed = true;
+      window.clearTimeout(timeoutId);
       try {
-        port.disconnect();
+        port?.disconnect();
       } catch {
         // ignore
       }
       resolve(record);
     };
+
+    const timeoutId = window.setTimeout(() => {
+      finish(null);
+    }, 20000);
+
+    port.onDisconnect.addListener(() => {
+      if (completed) {
+        return;
+      }
+      if (chrome.runtime.lastError) {
+        logError("Media stream disconnected", chrome.runtime.lastError);
+      }
+      finish(null);
+    });
 
     port.onMessage.addListener((message) => {
       if (!message || typeof message !== "object") {
@@ -227,7 +258,12 @@ const requestMediaFromExtension = async (id: string) => {
       }
     });
 
-    port.postMessage({ type: "zop:media:stream", id });
+    try {
+      port.postMessage({ type: "zop:media:stream", id });
+    } catch (error) {
+      logError("Failed to request media stream", error);
+      finish(null);
+    }
   });
 };
 
@@ -575,6 +611,9 @@ const getSendFileTimeoutMs = (step: FunnelStep) => {
 };
 
 const sendMediaStep = async (runId: string, chatId: string, step: FunnelStep) => {
+  if (isCancelled(runId)) {
+    return false;
+  }
   const media = await resolveMediaPayload(step);
   if (!media) {
     warn("Skipping media step without source", step.id);
@@ -770,7 +809,10 @@ const runFunnelSequence = async (runId: string, input: FunnelRunInput) => {
               }
             }
           } else {
-            await sendMediaStep(runId, chatId, step);
+            const sent = await sendMediaStep(runId, chatId, step);
+            if (!sent && !state.cancelled) {
+              throw new Error("media-unavailable");
+            }
           }
         } finally {
           deactivatePresence();

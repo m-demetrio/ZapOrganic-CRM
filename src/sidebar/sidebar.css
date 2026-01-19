@@ -710,15 +710,24 @@
   justify-content: space-between;
   gap: 10px;
   align-items: center;
+  min-width: 0;
 }
 
 .zop-run-title {
   font-weight: 600;
+  max-width: 160px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .zop-run-meta {
   font-size: 11px;
   color: var(--zop-muted);
+  max-width: 160px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .zop-run-status {
@@ -772,6 +781,19 @@
   gap: 10px;
   font-size: 12px;
   color: var(--zop-muted);
+  min-width: 0;
+}
+
+.zop-run-detail span {
+  min-width: 0;
+}
+
+.zop-run-detail span:last-child {
+  text-align: right;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 140px;
 }
 
 .zop-run-actions {
@@ -779,6 +801,7 @@
   align-items: center;
   justify-content: space-between;
   gap: 10px;
+  flex-wrap: wrap;
 }
 
 .zop-list {
