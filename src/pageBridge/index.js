@@ -141,7 +141,32 @@ const getChatById = (chatId) => {
   }
 };
 
-const handleRequest = (event) => {
+const waitForWppWithPixSupport = (timeoutMs = 10000) =>
+  new Promise((resolve, reject) => {
+    const start = Date.now();
+    const check = () => {
+      const wpp = window.WPP;
+      if (wpp?.chat && typeof wpp.chat.sendPixKeyMessage === "function") {
+        resolve(wpp);
+        return true;
+      }
+      if (Date.now() - start >= timeoutMs) {
+        reject(new Error("WPP nao pronto para PIX"));
+        return true;
+      }
+      return false;
+    };
+    if (check()) {
+      return;
+    }
+    const intervalId = window.setInterval(() => {
+      if (check()) {
+        window.clearInterval(intervalId);
+      }
+    }, 200);
+  });
+
+const handleRequest = async (event) => {
   const detail = event.detail || {};
   if (!detail.id) {
     return;
@@ -355,6 +380,39 @@ const handleRequest = (event) => {
       }
       emitResponse(detail.id, { ok: true, result: outcome.value });
     });
+    return;
+  }
+
+  if (detail.type === "send-pix") {
+    const chatId = getDetailValue(detail, "chatId");
+    const keyType = getDetailValue(detail, "keyType");
+    const key = getDetailValue(detail, "key");
+    const name = getDetailValue(detail, "name");
+    const instructions = getDetailValue(detail, "instructions") ?? "";
+
+    if (!chatId || !keyType || !key || !name) {
+      emitResponse(detail.id, { ok: false, error: "invalid-payload" });
+      return;
+    }
+
+    try {
+      const wpp = await waitForWppWithPixSupport();
+      if (!wpp?.chat || typeof wpp.chat.sendPixKeyMessage !== "function") {
+        throw new Error("sendPixKeyMessage indisponivel");
+      }
+      const payload = {
+        keyType,
+        key,
+        name,
+        instructions: typeof instructions === "string" ? instructions : ""
+      };
+      const result = await Promise.resolve(
+        wpp.chat.sendPixKeyMessage(chatId, payload, { createChat: false })
+      );
+      emitResponse(detail.id, { ok: true, result });
+    } catch (error) {
+      emitResponse(detail.id, { ok: false, error: error?.message || String(error) });
+    }
     return;
   }
 

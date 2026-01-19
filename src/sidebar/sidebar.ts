@@ -149,6 +149,70 @@ const requestPageBridge = <T = unknown>(
 
 const requestActiveChat = () => requestPageBridge<ActiveChat | null>({ type: "active-chat" }, 3000);
 
+const PIX_STORAGE_NAME_KEY = "zopPixNomePadrao";
+const PIX_STORAGE_MODE_KEY = "zopPixTipoPadrao";
+const PIX_MODE_OPTIONS = [
+  { value: "CPF", label: "CPF" },
+  { value: "CNPJ", label: "CNPJ" },
+  { value: "EMAIL", label: "E-mail" },
+  { value: "PHONE", label: "Telefone" },
+  { value: "EVP", label: "Chave aleatória" }
+] as const;
+
+type PixPreference = {
+  name?: string;
+  mode?: string;
+};
+
+const getStoredPixPreferences = (): Promise<PixPreference> =>
+  new Promise((resolve) => {
+    const fallback = {
+      name: typeof localStorage !== "undefined" ? localStorage.getItem(PIX_STORAGE_NAME_KEY) ?? undefined : undefined,
+      mode: typeof localStorage !== "undefined" ? localStorage.getItem(PIX_STORAGE_MODE_KEY) ?? undefined : undefined
+    };
+
+    if (typeof chrome !== "undefined" && chrome?.storage?.local) {
+      chrome.storage.local.get([PIX_STORAGE_NAME_KEY, PIX_STORAGE_MODE_KEY], (items) => {
+        resolve({
+          name: typeof items?.[PIX_STORAGE_NAME_KEY] === "string" ? items[PIX_STORAGE_NAME_KEY] : fallback.name,
+          mode: typeof items?.[PIX_STORAGE_MODE_KEY] === "string" ? items[PIX_STORAGE_MODE_KEY] : fallback.mode
+        });
+      });
+      return;
+    }
+
+    resolve(fallback);
+  });
+
+const setStoredPixPreferences = (updates: PixPreference) => {
+  const payload: Record<string, string> = {};
+  if (typeof updates.name === "string") {
+    payload[PIX_STORAGE_NAME_KEY] = updates.name;
+  }
+  if (typeof updates.mode === "string") {
+    payload[PIX_STORAGE_MODE_KEY] = updates.mode;
+  }
+  if (Object.keys(payload).length === 0) {
+    return;
+  }
+
+  try {
+    if (typeof chrome !== "undefined" && chrome?.storage?.local) {
+      chrome.storage.local.set(payload);
+      return;
+    }
+
+    if (typeof payload[PIX_STORAGE_NAME_KEY] === "string") {
+      localStorage.setItem(PIX_STORAGE_NAME_KEY, payload[PIX_STORAGE_NAME_KEY]);
+    }
+    if (typeof payload[PIX_STORAGE_MODE_KEY] === "string") {
+      localStorage.setItem(PIX_STORAGE_MODE_KEY, payload[PIX_STORAGE_MODE_KEY]);
+    }
+  } catch (error) {
+    console.warn("[ZOP][PIX] Falha ao salvar preferências", error);
+  }
+};
+
 const setupPanelNavigation = (shadow: ShadowRoot) => {
   const railItems = Array.from(shadow.querySelectorAll<HTMLButtonElement>(".zop-rail__item"));
   const panels = Array.from(shadow.querySelectorAll<HTMLElement>(".zop-panel"));
@@ -233,6 +297,182 @@ export const mountSidebar = () => {
 
   const openOptionsFunnelButton = shadow.querySelector<HTMLButtonElement>("[data-action='open-options']");
   openOptionsFunnelButton?.addEventListener("click", openOptionsHandler);
+
+  const openPixButton = shadow.querySelector<HTMLButtonElement>("#zop-open-pix");
+
+  async function openPixModal() {
+    if (document.getElementById("zop-pix-backdrop")) {
+      return;
+    }
+
+    const backdrop = document.createElement("div");
+    backdrop.id = "zop-pix-backdrop";
+    backdrop.className = "zop-pix-backdrop";
+
+    const modal = document.createElement("div");
+    modal.className = "zop-pix-modal";
+    modal.innerHTML = `
+      <h3 style="margin:0;font-size:20px">Enviar PIX</h3>
+
+      <div class="zop-pix-field">
+        <span class="zop-pix-label">Tipo</span>
+        <div class="zop-pix-radio-group">
+          ${PIX_MODE_OPTIONS.map(
+            (option, index) => `
+              <label class="zop-pix-radio">
+                <input type="radio" name="zop-pix-mode" value="${option.value}" ${index === 0 ? "checked" : ""} />
+                <span>${option.label}</span>
+              </label>
+            `
+          ).join("")}
+        </div>
+      </div>
+
+      <div class="zop-pix-field">
+        <label class="zop-pix-label" for="zop-pix-name">Nome</label>
+        <input id="zop-pix-name" class="zop-pix-input" type="text" placeholder="Ex.: ZapOrganic Pro" />
+        <p id="zop-pix-name-error" class="zop-pix-error" style="display:none">Informe o nome.</p>
+      </div>
+
+      <div class="zop-pix-field">
+        <label class="zop-pix-label" for="zop-pix-key">Chave</label>
+        <textarea id="zop-pix-key" class="zop-pix-textarea" rows="4" placeholder="Cole aqui..."></textarea>
+      </div>
+
+      <div class="zop-pix-footer">
+        <button class="zop-pix-btn zop-pix-btn--ghost" type="button" id="zop-pix-cancel">Cancelar</button>
+        <button class="zop-pix-btn zop-pix-btn--primary" type="button" id="zop-pix-send">Enviar</button>
+      </div>
+    `;
+
+    backdrop.appendChild(modal);
+    (document.body || document.documentElement)?.appendChild(backdrop);
+    document.documentElement.classList.add("zop-pix-modal-open");
+    document.body.classList.add("zop-pix-modal-open");
+
+    const nameInput = modal.querySelector<HTMLInputElement>("#zop-pix-name");
+    const keyInput = modal.querySelector<HTMLTextAreaElement>("#zop-pix-key");
+    const sendButton = modal.querySelector<HTMLButtonElement>("#zop-pix-send");
+    const cancelButton = modal.querySelector<HTMLButtonElement>("#zop-pix-cancel");
+    const errorEl = modal.querySelector<HTMLElement>("#zop-pix-name-error");
+    const modes = Array.from(modal.querySelectorAll<HTMLInputElement>('input[name="zop-pix-mode"]'));
+
+    const setError = (message: string) => {
+      if (errorEl) {
+        errorEl.textContent = message;
+        errorEl.style.display = message ? "block" : "none";
+      }
+    };
+
+    const cleanup = () => {
+      backdrop.remove();
+      document.documentElement.classList.remove("zop-pix-modal-open");
+      document.body.classList.remove("zop-pix-modal-open");
+    };
+
+    backdrop.addEventListener("click", (event) => {
+      if (event.target === backdrop) {
+        cleanup();
+      }
+    });
+
+    cancelButton?.addEventListener("click", () => cleanup());
+
+    const persistName = () => {
+      const value = nameInput?.value.trim() || "";
+      setStoredPixPreferences({ name: value });
+    };
+
+    const persistMode = (value: string) => {
+      setStoredPixPreferences({ mode: value });
+    };
+
+    nameInput?.addEventListener("input", () => {
+      setError("");
+      persistName();
+    });
+    nameInput?.addEventListener("blur", () => {
+      persistName();
+    });
+
+    modes.forEach((radio) => {
+      radio.addEventListener("change", () => {
+        if (radio.checked) {
+          persistMode(radio.value);
+        }
+      });
+    });
+
+    try {
+      const stored = await getStoredPixPreferences();
+      if (stored.name && nameInput) {
+        nameInput.value = stored.name;
+      }
+      if (stored.mode) {
+        const radio = modal.querySelector<HTMLInputElement>(`input[name="zop-pix-mode"][value="${stored.mode}"]`);
+        if (radio) {
+          radio.checked = true;
+        }
+      }
+    } catch (error) {
+      console.warn("[ZOP][PIX] Falha ao carregar preferencias", error);
+    }
+
+    sendButton?.addEventListener("click", async (event) => {
+      event.preventDefault();
+      setError("");
+      const selectedMode = modal.querySelector<HTMLInputElement>('input[name="zop-pix-mode"]:checked');
+      const mode = selectedMode?.value || PIX_MODE_OPTIONS[0].value;
+      const nameValue = nameInput?.value.trim() || "";
+      const keyValue = keyInput?.value.trim() || "";
+      if (!nameValue) {
+        setError("Informe o nome.");
+        nameInput?.focus();
+        return;
+      }
+      if (!keyValue) {
+        keyInput?.focus();
+        return;
+      }
+      persistName();
+      persistMode(mode);
+      try {
+        const chat = await requestActiveChat();
+        activeChat = chat;
+        if (chat && activeChatLabel) {
+          activeChatLabel.textContent = chat.name || chat.id || "Conversa ativa";
+        }
+        if (!chat?.id) {
+          alert("Abra uma conversa para enviar o PIX.");
+          return;
+        }
+
+        const response = await requestPageBridge<SendMessageResult>({
+          type: "send-pix",
+          chatId: chat.id,
+          keyType: mode,
+          key: keyValue,
+          name: nameValue,
+          instructions: ""
+        });
+
+        if (!response?.ok) {
+          throw new Error(response?.error || "Falha ao enviar o PIX.");
+        }
+
+        if (activeChatLabel) {
+          activeChatLabel.textContent = "PIX enviado";
+        }
+        cleanup();
+      } catch (error) {
+        alert(error?.message || "Falha ao enviar PIX.");
+      }
+    });
+  }
+
+  openPixButton?.addEventListener("click", () => {
+    void openPixModal();
+  });
 
   let collapsed = true;
   setCollapsed(shell, collapsed, layout);
