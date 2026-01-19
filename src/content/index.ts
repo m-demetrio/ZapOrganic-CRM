@@ -193,13 +193,13 @@ const ensurePixStyles = () => {
       width: min(520px, 90vw);
       background: #16161b;
       border-radius: 20px;
-      padding: 24px;
+      padding: 32px;
       box-shadow: 0 24px 55px rgba(0, 0, 0, 0.65);
       border: 1px solid rgba(88, 101, 242, 0.3);
       color: #fff;
       display: flex;
       flex-direction: column;
-      gap: 12px;
+      gap: 16px;
     }
     .zop-pix-field {
       display: flex;
