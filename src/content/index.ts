@@ -894,35 +894,45 @@ const ensureChatBarStyles = () => {
       width: 100%;
       max-width: 100%;
       margin: 0;
-      padding: 18px 22px 20px;
-      background: linear-gradient(135deg, #07031d 0%, #120526 45%, #1c0b36 100%);
-      border-radius: 0;
-      border: 1px solid var(--zop-chat-border);
-      box-shadow: 0 20px 50px rgba(0, 0, 0, 0.55);
+      padding: 10px 14px;
+      background: rgba(8, 8, 18, 0.92);
+      border-radius: 18px;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      box-shadow: 0 16px 40px rgba(5, 2, 20, 0.75);
+      backdrop-filter: blur(14px);
       display: flex;
       flex-direction: column;
-      gap: 14px;
+      gap: 10px;
       font-family: "Inter", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
       color: #f2eaff;
       position: relative;
       overflow: visible;
     }
+    #${CHAT_BAR_ID}::before,
     #${CHAT_BAR_ID}::after {
       content: "";
       position: absolute;
-      inset: 6px;
-      border-radius: 0;
-      border: 1px solid rgba(255, 255, 255, 0.08);
+      inset: 0;
+      border-radius: 18px;
       pointer-events: none;
+    }
+    #${CHAT_BAR_ID}::before {
+      border: 1px solid rgba(158, 87, 248, 0.25);
+      z-index: -1;
+    }
+    #${CHAT_BAR_ID}::after {
+      inset: 1px;
+      border: 1px solid rgba(255, 255, 255, 0.05);
+      z-index: -2;
     }
     #${CHAT_BAR_ID} * {
       box-sizing: border-box;
     }
     .zop-chat-bar__row {
       display: grid;
-      grid-template-columns: repeat(2, minmax(0, 1fr)) minmax(120px, auto);
-      gap: 14px;
-      align-items: flex-end;
+      grid-template-columns: repeat(2, minmax(0, 1fr)) minmax(90px, auto);
+      gap: 10px;
+      align-items: center;
     }
     .zop-chat-bar__field {
       display: flex;
@@ -984,12 +994,12 @@ const ensureChatBarStyles = () => {
       align-items: center;
       justify-content: space-between;
       gap: 10px;
-      padding: 12px 16px;
-      border: 1px solid rgba(255, 255, 255, 0.25);
+      padding: 10px 14px;
+      border: 1px solid rgba(255, 255, 255, 0.2);
       border-radius: 14px;
       background: rgba(255, 255, 255, 0.04);
       color: inherit;
-      font-size: 14px;
+      font-size: 13px;
       font-weight: 600;
       cursor: pointer;
       transition: border-color 0.2s ease, transform 0.18s ease;
@@ -1053,32 +1063,41 @@ const ensureChatBarStyles = () => {
       background: rgba(255, 255, 255, 0.08);
     }
     .zop-chat-bar__clean {
-      padding: 12px 24px;
-      border-radius: 50px;
-      border: 1px solid rgba(158, 87, 248, 0.8);
-      background: rgba(158, 87, 248, 0.15);
+      padding: 10px 16px;
+      border-radius: 999px;
+      border: 1px solid rgba(255, 255, 255, 0.4);
+      background: rgba(255, 255, 255, 0.06);
       color: #f2eaff;
-      font-size: 13px;
+      font-size: 12px;
       font-weight: 700;
       cursor: pointer;
       transition: background 0.2s ease, transform 0.2s ease;
       justify-self: flex-end;
-      align-self: flex-start;
+      align-self: center;
     }
     .zop-chat-bar__clean:hover {
-      background: rgba(158, 87, 248, 0.25);
+      background: rgba(255, 255, 255, 0.12);
       transform: translateY(-1px);
     }
     .zop-chat-bar__list {
       display: flex;
-      flex-wrap: wrap;
-      gap: 12px;
-      justify-content: flex-start;
-      align-items: stretch;
+      align-items: flex-start;
+      gap: 10px;
+      overflow-x: auto;
+      padding-bottom: 6px;
+      scrollbar-width: thin;
+      scrollbar-color: rgba(255, 255, 255, 0.45) transparent;
+    }
+    .zop-chat-bar__list::-webkit-scrollbar {
+      height: 4px;
+    }
+    .zop-chat-bar__list::-webkit-scrollbar-thumb {
+      background: rgba(255, 255, 255, 0.35);
+      border-radius: 999px;
     }
     .zop-chat-card {
-      flex: 1;
-      min-width: 260px;
+      flex: 0 0 auto;
+      min-width: 200px;
       border-radius: 18px;
       padding: 14px 18px;
       background: rgba(255, 255, 255, 0.02);
@@ -1175,7 +1194,7 @@ const ensureChatBarStyles = () => {
     }
     @media (max-width: 640px) {
       #${CHAT_BAR_ID} {
-        padding: 14px 16px;
+        padding: 12px 14px;
         border-radius: 18px;
       }
       .zop-chat-card {
