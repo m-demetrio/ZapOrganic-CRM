@@ -180,7 +180,7 @@ const ensurePixStyles = () => {
       transform: translateY(-1px);
       box-shadow: inset 0 0 0 2px rgba(88, 101, 242, 0.6);
     }
-    .zop-pix-backdrop {
+    #${PIX_BACKDROP_ID} {
       position: fixed;
       inset: 0;
       background: rgba(0, 0, 0, 0.65);
@@ -189,31 +189,34 @@ const ensurePixStyles = () => {
       justify-content: center;
       z-index: 2147483000;
     }
-    .zop-pix-modal {
+    #${PIX_MODAL_ID} {
       width: min(520px, 90vw);
       background: #16161b;
       border-radius: 20px;
-      padding: 32px;
+      padding: 32px 34px 28px;
+      box-sizing: border-box;
       box-shadow: 0 24px 55px rgba(0, 0, 0, 0.65);
       border: 1px solid rgba(88, 101, 242, 0.3);
       color: #fff;
       display: flex;
       flex-direction: column;
-      gap: 16px;
+      gap: 18px;
     }
-    .zop-pix-field {
+    #${PIX_MODAL_ID} .zop-pix-field {
       display: flex;
       flex-direction: column;
       gap: 6px;
+      width: 100%;
+      box-sizing: border-box;
     }
-    .zop-pix-label {
+    #${PIX_MODAL_ID} .zop-pix-label {
       font-size: 11px;
       letter-spacing: 0.3em;
       text-transform: uppercase;
       color: rgba(255, 255, 255, 0.6);
     }
-    .zop-pix-input,
-    .zop-pix-textarea {
+    #${PIX_MODAL_ID} .zop-pix-input,
+    #${PIX_MODAL_ID} .zop-pix-textarea {
       width: 100%;
       border-radius: 12px;
       border: 1px solid rgba(88, 101, 242, 0.4);
@@ -222,24 +225,25 @@ const ensurePixStyles = () => {
       padding: 10px 12px;
       font-size: 14px;
       resize: none;
+      box-sizing: border-box;
     }
-    .zop-pix-input:focus,
-    .zop-pix-textarea:focus {
+    #${PIX_MODAL_ID} .zop-pix-input:focus,
+    #${PIX_MODAL_ID} .zop-pix-textarea:focus {
       outline: none;
       border-color: rgba(88, 101, 242, 0.9);
       box-shadow: 0 0 0 2px rgba(88, 101, 242, 0.2);
     }
-    .zop-pix-error {
+    #${PIX_MODAL_ID} .zop-pix-error {
       font-size: 12px;
       color: #ff6b6b;
       margin: 0;
     }
-    .zop-pix-radio-group {
+    #${PIX_MODAL_ID} .zop-pix-radio-group {
       display: flex;
       flex-wrap: wrap;
       gap: 8px;
     }
-    .zop-pix-radio {
+    #${PIX_MODAL_ID} .zop-pix-radio {
       font-size: 13px;
       cursor: pointer;
       border-radius: 999px;
@@ -250,26 +254,26 @@ const ensurePixStyles = () => {
       align-items: center;
       gap: 6px;
       color: #fff;
+      transition: border-color 0.2s ease, box-shadow 0.2s ease;
     }
-    .zop-pix-radio input {
+    #${PIX_MODAL_ID} .zop-pix-radio input {
       display: none;
     }
-    .zop-pix-radio span {
+    #${PIX_MODAL_ID} .zop-pix-radio span {
       display: inline-flex;
       align-items: center;
     }
-    .zop-pix-radio input:checked + span {
-      background: rgba(88, 101, 242, 0.85);
-      border-radius: 999px;
-      padding: 2px 10px;
+    #${PIX_MODAL_ID} .zop-pix-radio input:checked + span {
+      border-color: rgba(88, 101, 242, 0.6);
+      box-shadow: 0 0 0 2px rgba(88, 101, 242, 0.2) inset;
     }
-    .zop-pix-footer {
+    #${PIX_MODAL_ID} .zop-pix-footer {
       display: flex;
       justify-content: flex-end;
-      gap: 10px;
-      margin-top: 8px;
+      gap: 12px;
+      margin-top: 6px;
     }
-    .zop-pix-btn {
+    #${PIX_MODAL_ID} .zop-pix-btn {
       border-radius: 999px;
       padding: 10px 18px;
       font-size: 14px;
@@ -277,12 +281,12 @@ const ensurePixStyles = () => {
       border: none;
       cursor: pointer;
     }
-    .zop-pix-btn--ghost {
+    #${PIX_MODAL_ID} .zop-pix-btn--ghost {
       background: transparent;
       border: 1px solid rgba(88, 101, 242, 0.6);
       color: #fff;
     }
-    .zop-pix-btn--primary {
+    #${PIX_MODAL_ID} .zop-pix-btn--primary {
       background: linear-gradient(135deg, rgba(0, 248, 136, 0.7), rgba(0, 192, 255, 0.8));
       color: #041003;
       box-shadow: 0 10px 24px rgba(0, 192, 255, 0.4);
