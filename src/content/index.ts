@@ -25,6 +25,12 @@ const PIX_COMPOSER_HOST_SELECTORS = [
   "[data-testid='conversation-compose-box']"
 ] as const;
 
+const CHAT_BAR_ID = "zop-chat-bar";
+const CHAT_BAR_STYLE_ID = "zop-chat-bar-style";
+const CHAT_BAR_TYPE_BUTTON_ID = "zop-chat-bar-type-button";
+const CHAT_BAR_TYPE_MENU_ID = "zop-chat-bar-type-menu";
+const CHAT_BAR_TYPES = ["Textos", "Áudios", "Imagens", "Vídeos", "Funil", "Outros"] as const;
+
 type PageBridgeResponse<T> = {
   id: string;
   payload?: T;
@@ -527,8 +533,524 @@ const startComposerObserver = () => {
   }
   composerObserver = new MutationObserver(() => {
     void mountPixComposerButton();
+    void mountChatFunnelBar();
   });
   composerObserver.observe(document.body, { childList: true, subtree: true });
+};
+
+const ensureChatBarStyles = () => {
+  if (document.getElementById(CHAT_BAR_STYLE_ID)) {
+    return;
+  }
+
+  const style = document.createElement("style");
+  style.id = CHAT_BAR_STYLE_ID;
+  style.textContent = `
+    #${CHAT_BAR_ID} {
+      --zop-chat-purple-main: #9e57f8;
+      --zop-chat-purple-mid: #9050f0;
+      --zop-chat-purple-dark: #402080;
+      --zop-chat-border: rgba(158, 87, 248, 0.45);
+      width: 100%;
+      max-width: 100%;
+      margin: 0;
+      padding: 18px 22px 20px;
+      background: linear-gradient(135deg, #07031d 0%, #120526 45%, #1c0b36 100%);
+      border-radius: 0;
+      border: 1px solid var(--zop-chat-border);
+      box-shadow: 0 20px 50px rgba(0, 0, 0, 0.55);
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+      font-family: "Inter", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      color: #f2eaff;
+      position: relative;
+      overflow: visible;
+    }
+    #${CHAT_BAR_ID}::after {
+      content: "";
+      position: absolute;
+      inset: 6px;
+      border-radius: 0;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      pointer-events: none;
+    }
+    #${CHAT_BAR_ID} * {
+      box-sizing: border-box;
+    }
+    .zop-chat-bar__row {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr)) minmax(120px, auto);
+      gap: 14px;
+      align-items: flex-end;
+    }
+    .zop-chat-bar__field {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .zop-chat-bar__label {
+      font-size: 10px;
+      letter-spacing: 0.35em;
+      text-transform: uppercase;
+      color: rgba(242, 234, 255, 0.7);
+      font-weight: 600;
+    }
+    .zop-chat-bar__input-wrap {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 14px;
+      border-radius: 12px;
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid rgba(158, 87, 248, 0.35);
+      transition: border-color 0.2s ease, box-shadow 0.2s ease;
+    }
+    .zop-chat-bar__input-wrap:focus-within {
+      border-color: rgba(158, 87, 248, 0.7);
+      box-shadow: 0 0 0 2px rgba(158, 87, 248, 0.25);
+    }
+    .zop-chat-bar__input-icon {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 20px;
+      height: 20px;
+      color: #c490fe;
+    }
+    .zop-chat-bar__input-icon svg {
+      width: 18px;
+      height: 18px;
+      stroke: currentColor;
+      fill: none;
+    }
+    .zop-chat-bar__input {
+      flex: 1;
+      padding: 4px 0;
+      border: none;
+      background: transparent;
+      color: inherit;
+      font-size: 14px;
+    }
+    .zop-chat-bar__input:focus {
+      outline: none;
+    }
+    .zop-chat-bar__type-wrap {
+      position: relative;
+    }
+    .zop-chat-bar__type {
+      width: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      padding: 12px 16px;
+      border: 1px solid rgba(255, 255, 255, 0.25);
+      border-radius: 14px;
+      background: rgba(255, 255, 255, 0.04);
+      color: inherit;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: border-color 0.2s ease, transform 0.18s ease;
+    }
+    .zop-chat-bar__type:focus-visible,
+    .zop-chat-bar__type:hover {
+      border-color: rgba(158, 87, 248, 0.7);
+    }
+    .zop-chat-bar__type-arrow {
+      display: inline-flex;
+      width: 18px;
+      height: 18px;
+      color: rgba(255, 255, 255, 0.8);
+    }
+    .zop-chat-bar__type-arrow svg {
+      width: 18px;
+      height: 18px;
+      stroke: currentColor;
+      fill: none;
+    }
+    .zop-chat-bar__type-menu {
+      position: absolute;
+      left: 0;
+      right: 0;
+      top: auto;
+      bottom: calc(100% + 8px);
+      background: rgba(14, 4, 26, 0.95);
+      border-radius: 14px;
+      border: 1px solid rgba(158, 87, 248, 0.5);
+      box-shadow: 0 20px 40px rgba(0, 0, 0, 0.55);
+      opacity: 0;
+      pointer-events: none;
+      transform: translateY(6px);
+      transition: opacity 0.2s ease, transform 0.2s ease;
+      display: flex;
+      flex-direction: column;
+      padding: 4px 0;
+      min-width: 160px;
+      z-index: 2147483501;
+      max-height: 260px;
+      overflow-y: auto;
+    }
+    .zop-chat-bar__type-menu.is-open {
+      opacity: 1;
+      pointer-events: auto;
+      transform: translateY(0);
+    }
+    .zop-chat-bar__type-item {
+      background: transparent;
+      border: none;
+      color: #f2eaff;
+      text-align: left;
+      padding: 10px 18px;
+      width: 100%;
+      font-weight: 500;
+      font-size: 14px;
+      cursor: pointer;
+      transition: background 0.2s ease;
+    }
+    .zop-chat-bar__type-item:hover {
+      background: rgba(255, 255, 255, 0.08);
+    }
+    .zop-chat-bar__clean {
+      padding: 12px 24px;
+      border-radius: 50px;
+      border: 1px solid rgba(158, 87, 248, 0.8);
+      background: rgba(158, 87, 248, 0.15);
+      color: #f2eaff;
+      font-size: 13px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: background 0.2s ease, transform 0.2s ease;
+      justify-self: flex-end;
+      align-self: flex-start;
+    }
+    .zop-chat-bar__clean:hover {
+      background: rgba(158, 87, 248, 0.25);
+      transform: translateY(-1px);
+    }
+    .zop-chat-bar__list {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      justify-content: flex-start;
+      align-items: stretch;
+    }
+    .zop-chat-card {
+      flex: 1;
+      min-width: 260px;
+      border-radius: 18px;
+      padding: 14px 18px;
+      background: rgba(255, 255, 255, 0.02);
+      border: 1px solid rgba(158, 87, 248, 0.45);
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      box-shadow: 0 18px 40px rgba(0, 0, 0, 0.45);
+    }
+    .zop-chat-card__icon {
+      width: 52px;
+      height: 52px;
+      border-radius: 16px;
+      background: rgba(158, 87, 248, 0.2);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #c490fe;
+    }
+    .zop-chat-card__icon svg {
+      width: 24px;
+      height: 24px;
+      stroke: currentColor;
+      fill: none;
+    }
+    .zop-chat-card__content {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+    .zop-chat-card__title {
+      font-size: 16px;
+      font-weight: 700;
+    }
+    .zop-chat-card__subtitle {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.4em;
+      color: rgba(242, 234, 255, 0.6);
+    }
+    .zop-chat-card__meta {
+      font-size: 12px;
+      color: rgba(242, 234, 255, 0.8);
+    }
+    .zop-chat-card__actions {
+      display: flex;
+      gap: 6px;
+    }
+    .zop-chat-card__btn {
+      border-radius: 999px;
+      border: none;
+      padding: 8px 16px;
+      font-size: 13px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: transform 0.15s ease;
+    }
+    .zop-chat-card__btn:active {
+      transform: translateY(1px);
+    }
+    .zop-chat-card__btn--ghost {
+      background: transparent;
+      border: 1px solid rgba(255, 255, 255, 0.35);
+      color: inherit;
+    }
+    .zop-chat-card__btn:not(.zop-chat-card__btn--ghost) {
+      background: linear-gradient(135deg, rgba(158,87,248,0.95), rgba(144, 144, 255, 0.9));
+      color: #09011a;
+      box-shadow: 0 8px 24px rgba(158, 87, 248, 0.35);
+    }
+    @media (max-width: 960px) {
+      .zop-chat-bar__row {
+        grid-template-columns: 1fr;
+      }
+      .zop-chat-bar__clean {
+        justify-self: flex-end;
+      }
+    }
+    @media (max-width: 640px) {
+      #${CHAT_BAR_ID} {
+        padding: 14px 16px;
+        border-radius: 18px;
+      }
+      .zop-chat-card {
+        flex-direction: column;
+        align-items: flex-start;
+      }
+      .zop-chat-card__actions {
+        flex-wrap: wrap;
+        width: 100%;
+        justify-content: flex-end;
+      }
+      .zop-chat-card__btn {
+        flex: 1;
+        text-align: center;
+      }
+    }
+  `;
+  document.head?.appendChild(style);
+};
+
+let chatBarResizeObserver: ResizeObserver | null = null;
+let chatBarResizeListenerBound = false;
+
+const syncChatBarPosition = () => {
+  const panel = document.getElementById(CHAT_BAR_ID);
+  const host = locateComposerHost();
+  const footer = locateChatFooter();
+  if (!panel || !host || !footer) {
+    return;
+  }
+
+  const hostRect = host.getBoundingClientRect();
+  const footerRect = footer.getBoundingClientRect();
+  const insetLeft = Math.max(0, hostRect.left - footerRect.left);
+  const insetRight = Math.max(0, footerRect.right - hostRect.right);
+  const availableWidth = hostRect.width - insetLeft - insetRight;
+  panel.style.width = `${Math.max(0, availableWidth)}px`;
+  panel.style.marginLeft = `${insetLeft}px`;
+  panel.style.marginRight = `${insetRight}px`;
+};
+
+const observeChatBarComposerResize = () => {
+  if (typeof ResizeObserver === "undefined") {
+    return;
+  }
+
+  const host = locateComposerHost();
+  if (!host) {
+    return;
+  }
+
+  chatBarResizeObserver?.disconnect();
+  chatBarResizeObserver = new ResizeObserver(() => {
+    syncChatBarPosition();
+  });
+  chatBarResizeObserver.observe(host);
+};
+
+const ensureChatBarWindowListener = () => {
+  if (chatBarResizeListenerBound) {
+    return;
+  }
+
+  window.addEventListener("resize", syncChatBarPosition);
+  chatBarResizeListenerBound = true;
+};
+
+const locateChatFooter = () => {
+  const host = locateComposerHost();
+  if (!host) {
+    return null;
+  }
+
+  const footer = host.closest("footer");
+  return footer ?? host.parentElement;
+};
+
+const createChatBarElement = () => {
+  const panel = document.createElement("div");
+  panel.id = CHAT_BAR_ID;
+  panel.innerHTML = `
+    <div class="zop-chat-bar__row">
+      <div class="zop-chat-bar__field">
+        <div class="zop-chat-bar__label">Buscar funil pelo título</div>
+        <div class="zop-chat-bar__input-wrap">
+          <span class="zop-chat-bar__input-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" role="presentation" focusable="false">
+              <circle cx="10" cy="10" r="6" stroke="currentColor" stroke-width="1.8" fill="none" />
+              <line x1="15.5" y1="15.5" x2="20" y2="20" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
+            </svg>
+          </span>
+          <input
+            id="zop-chat-bar-title"
+            class="zop-chat-bar__input"
+            type="search"
+            placeholder="Buscar funil pelo título"
+            autocomplete="off"
+          />
+        </div>
+      </div>
+      <div class="zop-chat-bar__field">
+        <div class="zop-chat-bar__label">Buscar funil pelo tipo</div>
+        <div class="zop-chat-bar__type-wrap">
+          <button
+            class="zop-chat-bar__type"
+            type="button"
+            id="${CHAT_BAR_TYPE_BUTTON_ID}"
+            aria-haspopup="true"
+            aria-expanded="false"
+            data-selected-type="${CHAT_BAR_TYPES[4]}"
+          >
+            <span class="zop-chat-bar__type-label">${CHAT_BAR_TYPES[4]}</span>
+            <span class="zop-chat-bar__type-arrow" aria-hidden="true">
+              <svg viewBox="0 0 24 24" role="presentation" focusable="false">
+                <path d="M7 9l5 5 5-5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" fill="none" />
+              </svg>
+            </span>
+          </button>
+          <div class="zop-chat-bar__type-menu" id="${CHAT_BAR_TYPE_MENU_ID}" role="menu">
+            ${CHAT_BAR_TYPES.map(
+              (type) => `
+                <button type="button" class="zop-chat-bar__type-item" data-type="${type}" role="menuitem">
+                  ${type}
+                </button>
+              `
+            ).join("")}
+          </div>
+        </div>
+      </div>
+      <button class="zop-chat-bar__clean" type="button">Limpar</button>
+    </div>
+    <div class="zop-chat-bar__list" aria-live="polite">
+      <article class="zop-chat-card" role="group" aria-label="Funil de exemplo">
+        <div class="zop-chat-card__icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" role="presentation" focusable="false">
+            <rect x="6" y="4" width="12" height="16" rx="2" stroke="currentColor" stroke-width="1.5" fill="none" />
+            <path d="M8 9h6M8 13h6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
+          </svg>
+        </div>
+        <div class="zop-chat-card__content">
+          <div class="zop-chat-card__title">Teste</div>
+          <div class="zop-chat-card__subtitle">Funil</div>
+          <div class="zop-chat-card__meta">3 mensagens</div>
+        </div>
+        <div class="zop-chat-card__actions">
+          <button class="zop-chat-card__btn zop-chat-card__btn--ghost" type="button">Visualizar</button>
+          <button class="zop-chat-card__btn" type="button">Enviar funil</button>
+        </div>
+      </article>
+    </div>
+  `;
+  return panel;
+};
+
+const setupChatBarInteractions = (panel: HTMLElement) => {
+  if (panel.dataset.chatBarInitialized === "true") {
+    return;
+  }
+  panel.dataset.chatBarInitialized = "true";
+  const searchInput = panel.querySelector<HTMLInputElement>("#zop-chat-bar-title");
+  const typeButton = panel.querySelector<HTMLButtonElement>(`#${CHAT_BAR_TYPE_BUTTON_ID}`);
+  const typeLabel = typeButton?.querySelector<HTMLElement>(".zop-chat-bar__type-label");
+  const typeMenu = panel.querySelector<HTMLElement>(`#${CHAT_BAR_TYPE_MENU_ID}`);
+  const cleanButton = panel.querySelector<HTMLButtonElement>(".zop-chat-bar__clean");
+
+  if (!typeButton || !typeMenu || !typeLabel) {
+    return;
+  }
+
+  const closeMenu = () => {
+    typeMenu.classList.remove("is-open");
+    typeButton.setAttribute("aria-expanded", "false");
+  };
+
+  typeButton.addEventListener("click", (event) => {
+    event.preventDefault();
+    const isOpen = typeMenu.classList.toggle("is-open");
+    typeButton.setAttribute("aria-expanded", String(isOpen));
+  });
+
+  Array.from(typeMenu.querySelectorAll<HTMLButtonElement>(".zop-chat-bar__type-item")).forEach((item) => {
+    item.addEventListener("click", () => {
+      const value = item.dataset.type?.trim() || item.textContent?.trim() || "";
+      if (value) {
+        typeLabel.textContent = value;
+        typeButton.dataset.selectedType = value;
+      }
+      closeMenu();
+    });
+  });
+
+  const handleDocumentClick = (event: MouseEvent) => {
+    const target = event.target as Node;
+    if (!typeMenu.contains(target) && !typeButton.contains(target)) {
+      closeMenu();
+    }
+  };
+  document.addEventListener("click", handleDocumentClick);
+
+  cleanButton?.addEventListener("click", () => {
+    if (searchInput) {
+      searchInput.value = "";
+    }
+    typeLabel.textContent = CHAT_BAR_TYPES[4];
+    typeButton.dataset.selectedType = CHAT_BAR_TYPES[4];
+  });
+};
+
+const mountChatFunnelBar = () => {
+  ensureChatBarStyles();
+  const footer = locateChatFooter();
+  if (!footer) {
+    return;
+  }
+
+  if (footer.querySelector(`#${CHAT_BAR_ID}`)) {
+    return;
+  }
+
+  const panel = createChatBarElement();
+  const composerHost = locateComposerHost();
+  if (composerHost && composerHost.parentElement === footer) {
+    footer.insertBefore(panel, composerHost);
+  } else {
+    footer.appendChild(panel);
+  }
+  setupChatBarInteractions(panel);
+  syncChatBarPosition();
+  observeChatBarComposerResize();
+  ensureChatBarWindowListener();
 };
 
 const injectPageScript = (filePath: string, type: "text/javascript" = "text/javascript") => {
@@ -557,6 +1079,7 @@ const init = () => {
 
 const startExtension = () => {
   init();
+  mountChatFunnelBar();
   void mountPixComposerButton();
   startComposerObserver();
 };
