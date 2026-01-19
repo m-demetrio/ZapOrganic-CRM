@@ -225,6 +225,116 @@ const migrateQuickRepliesMedia = async (items: QuickReply[]) => {
   return changed;
 };
 
+const AUDIO_OGG_MIME = "audio/ogg; codecs=opus";
+
+const getAudioContextCtor = () => {
+  if (typeof window === "undefined") {
+    return null;
+  }
+
+  return (
+    (window.AudioContext ?? (window as Window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext) ??
+    null
+  );
+};
+
+const supportsOggRecording = () => {
+  if (typeof window === "undefined" || typeof window.MediaRecorder !== "function") {
+    return false;
+  }
+  const recorder = window.MediaRecorder;
+  if (typeof recorder.isTypeSupported === "function") {
+    return recorder.isTypeSupported(AUDIO_OGG_MIME);
+  }
+  return true;
+};
+
+const convertAudioToOggDataUrl = async (dataUrl: string) => {
+  const AudioCtor = getAudioContextCtor();
+  if (!AudioCtor || !supportsOggRecording()) {
+    return null;
+  }
+
+  const response = await fetch(dataUrl);
+  const arrayBuffer = await response.arrayBuffer();
+  const context = new AudioCtor();
+  try {
+    const audioBuffer = await context.decodeAudioData(arrayBuffer);
+    const destination = context.createMediaStreamDestination();
+    const source = context.createBufferSource();
+    source.buffer = audioBuffer;
+    source.connect(destination);
+
+    return await new Promise<string>((resolve, reject) => {
+      const recorder = new window.MediaRecorder(destination.stream, { mimeType: AUDIO_OGG_MIME });
+      const chunks: Blob[] = [];
+
+      recorder.ondataavailable = (event) => {
+        if (event.data && event.data.size > 0) {
+          chunks.push(event.data);
+        }
+      };
+
+      recorder.onerror = (event) => {
+        reject(event.error || new Error("MediaRecorder failed"));
+      };
+
+      recorder.onstop = () => {
+        const blob = new Blob(chunks, { type: AUDIO_OGG_MIME });
+        const reader = new FileReader();
+        reader.onload = () => {
+          resolve(reader.result as string);
+        };
+        reader.onerror = (error) => {
+          reject(error);
+        };
+        reader.readAsDataURL(blob);
+      };
+
+      source.addEventListener("ended", () => {
+        if (recorder.state !== "inactive") {
+          recorder.stop();
+        }
+      });
+
+      recorder.start();
+      source.start();
+    });
+  } finally {
+    context.close().catch(() => {});
+  }
+};
+
+const ensureOggDataUrl = async (
+  dataUrl: string,
+  mimeType?: string,
+  shouldConvert = false
+): Promise<{ dataUrl: string; mimeType?: string }> => {
+  const dataMimeType = mimeType ?? dataUrl.split(";")[0].split(":")[1];
+  const alreadyOgg = typeof dataMimeType === "string" && dataMimeType.includes("ogg");
+  if (!shouldConvert || alreadyOgg || !supportsOggRecording()) {
+    return { dataUrl, mimeType };
+  }
+
+  try {
+    const converted = await convertAudioToOggDataUrl(dataUrl);
+    if (converted) {
+      return { dataUrl: converted, mimeType: AUDIO_OGG_MIME };
+    }
+  } catch (error) {
+    console.warn("[ZOP][OPTIONS] Falha ao converter audio para OGG", error);
+  }
+
+  return { dataUrl, mimeType };
+};
+
+const applyOggExtension = (fileName?: string, mimeType?: string) => {
+  if (!fileName || typeof mimeType !== "string" || !mimeType.includes("ogg")) {
+    return fileName;
+  }
+  return fileName.replace(/\.[^.]+$/, ".ogg");
+};
+
 
 
 const init = async () => {
@@ -1216,16 +1326,22 @@ const init = async () => {
       const uploadKey = `step:${step.id}`;
       const uploadPromise = readFileAsDataUrl(file)
         .then(async (result) => {
-          const mediaId = await putMedia(result.data, result.mimeType, result.fileName);
+          const shouldConvertToOgg = step.type === "ptt";
+          const normalized = await ensureOggDataUrl(result.data, result.mimeType, shouldConvertToOgg);
+          const mediaId = await putMedia(
+            normalized.dataUrl,
+            normalized.mimeType,
+            applyOggExtension(result.fileName, normalized.mimeType) ?? result.fileName
+          );
           step.mediaId = mediaId;
           step.mediaFileData = undefined;
-          step.mediaMimeType = undefined;
-          step.fileName = step.fileName ?? result.fileName;
+          step.mediaMimeType = normalized.mimeType;
+          step.fileName = applyOggExtension(step.fileName ?? result.fileName, normalized.mimeType) ?? result.fileName;
           updateStepFileLabel(stepElement, step.fileName);
 
           if (["audio", "ptt", "ptv", "video"].includes(step.type)) {
             const kind = step.type === "video" || step.type === "ptv" ? "video" : "audio";
-            const duration = await estimateMediaDuration(result.data, kind);
+            const duration = await estimateMediaDuration(normalized.dataUrl, kind);
             step.mediaDurationSec = duration || undefined;
             updateStepDurationHint(stepElement, step, step.mediaDurationMode ?? DEFAULT_MEDIA_DURATION_MODE);
           }
@@ -1306,11 +1422,15 @@ const init = async () => {
     const uploadKey = `qr:${getQuickReplyMediaStageKey()}`;
     const uploadPromise = readFileAsDataUrl(file)
       .then(async (fileData) => {
-        const mediaId = await putMedia(fileData.data, fileData.mimeType, fileData.fileName);
+        const mediaType = (quickReplyTypeInput?.value as QuickReply["mediaType"]) ?? "text";
+        const shouldConvertToOgg = mediaType === "ptt";
+        const normalized = await ensureOggDataUrl(fileData.data, fileData.mimeType, shouldConvertToOgg);
+        const normalizedFileName = applyOggExtension(fileData.fileName, normalized.mimeType) ?? fileData.fileName;
+        const mediaId = await putMedia(normalized.dataUrl, normalized.mimeType, normalizedFileName);
         stage.mediaId = mediaId;
-        stage.fileName = fileData.fileName;
+        stage.fileName = normalizedFileName;
         if (quickReplyFileNameInput) {
-          quickReplyFileNameInput.value = fileData.fileName;
+          quickReplyFileNameInput.value = normalizedFileName;
         }
         updateQuickReplyMediaPreview();
       })
