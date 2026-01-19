@@ -82,6 +82,10 @@
   grid-template-columns: 1fr;
 }
 
+.zop-shell.is-collapsed .zop-rail {
+  grid-column: 1;
+}
+
 .zop-shell.is-collapsed .zop-rail__item {
   width: 100%;
 }
@@ -237,13 +241,15 @@
 
 .zop-layout {
   display: grid;
-  grid-template-columns: var(--zop-rail-width) 1fr;
+  grid-template-columns: 1fr var(--zop-rail-width);
   gap: 14px;
   min-height: 0;
   align-items: start;
 }
 
 .zop-rail {
+  grid-column: 2;
+  grid-row: 1 / -1;
   display: flex;
   flex-direction: column;
   gap: 6px;
@@ -353,6 +359,7 @@
 }
 
 .zop-content {
+  grid-column: 1;
   min-height: 0;
   overflow-y: auto;
   padding-right: 6px;
