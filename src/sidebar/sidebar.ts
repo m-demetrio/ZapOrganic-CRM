@@ -332,8 +332,18 @@ export const mountSidebar = () => {
         return "Etiqueta";
       case "webhook":
         return "Webhook";
+      case "audio":
+        return "Audio";
+      case "ptt":
+        return "PTT (gravado)";
       case "ptv":
         return "Video recado";
+      case "image":
+        return "Imagem";
+      case "video":
+        return "Video";
+      case "file":
+        return "Arquivo";
       default:
         return "Etapa";
     }
@@ -355,6 +365,10 @@ export const mountSidebar = () => {
 
     if (step.type === "webhook") {
       return step.webhookEvent ? `Evento: ${step.webhookEvent}` : "Webhook";
+    }
+
+    if (step.type === "audio" || step.type === "ptt" || step.type === "ptv" || step.type === "image" || step.type === "video" || step.type === "file") {
+      return step.fileName?.trim() || step.mediaCaption?.trim() || formatStepType(step);
     }
 
     return "Etapa";
