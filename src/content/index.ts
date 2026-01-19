@@ -490,7 +490,7 @@ const mountPixComposerButton = () => {
   button.title = "Enviar PIX";
   button.setAttribute("aria-label", "Enviar PIX");
   button.className = "zop-pix-inline-button";
-  button.textContent = "ÐYÏ'";
+  button.textContent = "🤑";
   button.addEventListener("click", () => {
     console.log("[ZOP][PIX] mount button ok");
     void openPixModal();
