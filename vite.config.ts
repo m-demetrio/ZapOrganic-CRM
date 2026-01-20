@@ -48,6 +48,7 @@ export default defineConfig(({ mode }) => {
     build: {
       outDir: "dist",
       sourcemap: isDev,
+      minify: isDev ? false : "esbuild",
       emptyOutDir: true,
       rollupOptions: {
         input: {
