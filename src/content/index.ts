@@ -896,7 +896,7 @@ const ensureChatBarStyles = () => {
       --zop-chat-purple-mid: #9050f0;
       --zop-chat-purple-dark: #402080;
       --zop-chat-border: rgba(158, 87, 248, 0.45);
-      width: 100%;
+      width: auto;
       max-width: 100%;
       margin: 0;
       padding: 10px 14px;
@@ -1235,10 +1235,6 @@ const syncChatBarPosition = () => {
   const footerRect = footer.getBoundingClientRect();
   const insetLeft = Math.max(0, footerRect.left - hostRect.left);
   const insetRight = Math.max(0, footerRect.right - hostRect.right);
-  const availableWidth = hostRect.width - insetLeft - insetRight;
-  panel.style.width = `${Math.max(0, availableWidth)}px`;
-  panel.style.marginLeft = `${insetLeft}px`;
-  panel.style.marginRight = `${insetRight}px`;
 };
 
 const observeChatBarComposerResize = () => {
