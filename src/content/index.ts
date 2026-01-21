@@ -336,7 +336,7 @@ type FunnelRunner = {
     chatId: string;
     lead: LeadCard;
     integrationSettings: IntegrationSettings;
-  }) => string;
+  }) => string | null;
 };
 
 const CHAT_BAR_CARD_ICON = `
@@ -402,6 +402,11 @@ async function runFunnelForActiveChat(funnel: Funnel) {
     lead,
     integrationSettings: chatBarIntegrationSettings
   });
+
+  if (!runId) {
+    console.warn("[ZOP][CHAT BAR] funnel já em andamento para este chat");
+    return;
+  }
 
   window.dispatchEvent(
     new CustomEvent("zop:chat-bar-run", {

@@ -60,8 +60,8 @@ type FunnelRunView = {
 };
 
 type LayoutConfig = {
-  openOffset: number;
-  collapsedOffset: number;
+  openWidth: number;
+  collapsedWidth: number;
 };
 
 const parseCssPx = (value: string) => {
@@ -69,39 +69,41 @@ const parseCssPx = (value: string) => {
   return Number.isFinite(parsed) ? parsed : undefined;
 };
 
-const resolveAppRoot = () =>
-  document.querySelector<HTMLElement>("#app") ??
-  document.querySelector<HTMLElement>("[data-testid='app']") ??
-  document.querySelector<HTMLElement>("[data-testid='whatsapp-web']") ??
-  document.querySelector<HTMLElement>("div[id^='mount_']") ??
-  document.body;
+const getWaLayoutRoot = (): HTMLElement | null => {
+  const main = document.querySelector<HTMLElement>("#main");
+  if (main) {
+    const selectors = ["[data-testid='app']", "#app", "[data-testid='whatsapp-web']", "div[id^='mount_']"];
+    for (const selector of selectors) {
+      const ancestor = main.closest<HTMLElement>(selector);
+      if (ancestor) {
+        return ancestor;
+      }
+    }
+    return main;
+  }
 
-const applyLayoutOffset = (root: HTMLElement, offset: number) => {
-  const offsetValue = `${offset}px`;
+  return document.querySelector<HTMLElement>("[data-testid='app']") ?? document.querySelector<HTMLElement>("#app") ?? document.body;
+};
 
-  root.style.boxSizing = "border-box";
-  root.style.transition = "width 0.35s ease, max-width 0.35s ease, margin 0.35s ease, right 0.35s ease";
-  root.style.width = `calc(100% - ${offsetValue})`;
-  root.style.maxWidth = `calc(100% - ${offsetValue})`;
-  root.style.marginRight = offsetValue;
-  root.style.right = offsetValue;
+const applyShift = (width: number) => {
+  const root = getWaLayoutRoot();
+  if (root) {
+    root.style.setProperty("padding-right", `calc(${width}px + 12px)`);
+    root.style.setProperty("box-sizing", "border-box");
+  }
 
-  document.documentElement.style.setProperty("--zop-sidebar-offset", offsetValue);
+  document.documentElement.style.setProperty("--zop-shift", `${width}px`);
   document.body.style.overflowX = "hidden";
 };
 
-const setCollapsed = (shell: HTMLElement, collapsed: boolean, layout?: LayoutConfig) => {
+const setCollapsed = (shell: HTMLElement, collapsed: boolean, layout?: LayoutConfig, host?: HTMLElement) => {
   shell.classList.toggle("is-collapsed", collapsed);
-  const toggle = shell.querySelector<HTMLButtonElement>("#zop-toggle");
-  if (toggle) {
-    toggle.setAttribute("aria-expanded", String(!collapsed));
-    toggle.dataset.state = collapsed ? "closed" : "open";
-  }
-
   if (layout) {
-    const root = resolveAppRoot();
-    const offset = collapsed ? layout.collapsedOffset : layout.openOffset;
-    applyLayoutOffset(root, offset);
+    const hostWidth = collapsed ? layout.collapsedWidth : layout.openWidth;
+    if (host) {
+      host.style.setProperty("--zop-host-width", `${hostWidth}px`);
+    }
+    applyShift(hostWidth);
   }
 };
 
@@ -227,6 +229,26 @@ const setupPanelNavigation = (shadow: ShadowRoot) => {
     setActivePanel(current.dataset.panel);
   }
 
+  const tooltipMap: Record<string, string> = {
+    funis: "Funis",
+    envios: "Envios",
+    fluxos: "Fluxos",
+    agenda: "Agenda",
+    itens: "Respostas",
+    ajustes: "Ajustes",
+    backups: "Backups"
+  };
+
+  railItems.forEach((item) => {
+    const panel = item.dataset.panel;
+    if (panel) {
+      const tooltip = tooltipMap[panel];
+      if (tooltip) {
+        item.dataset.tooltip = tooltip;
+      }
+    }
+  });
+
   return { railItems, setActivePanel };
 };
 
@@ -257,20 +279,19 @@ export const mountSidebar = () => {
   (document.body || document.documentElement).appendChild(host);
 
   const shell = shadow.querySelector<HTMLElement>(".zop-shell");
-  const toggle = shadow.querySelector<HTMLButtonElement>("#zop-toggle");
-  if (!shell || !toggle) {
+  if (!shell) {
     return;
   }
 
   const hostStyles = getComputedStyle(host);
-  const sidebarWidth = parseCssPx(hostStyles.getPropertyValue("--zop-sidebar-width")) ?? 420;
+  const sidebarWidth = parseCssPx(hostStyles.getPropertyValue("--zop-sidebar-width")) ?? 280;
   const collapsedWidth =
     parseCssPx(hostStyles.getPropertyValue("--zop-collapsed-width")) ??
     parseCssPx(hostStyles.getPropertyValue("--zop-rail-width")) ??
-    96;
+    72;
   let layout: LayoutConfig = {
-    openOffset: sidebarWidth,
-    collapsedOffset: collapsedWidth
+    openWidth: sidebarWidth,
+    collapsedWidth
   };
 
   const logo = shadow.querySelector<HTMLImageElement>("#zop-logo");
@@ -282,7 +303,7 @@ export const mountSidebar = () => {
     logoRail.src = chrome.runtime.getURL("logo-zaporganic.png");
   }
 
-  const openOptionsButton = shadow.querySelector<HTMLButtonElement>("#zop-open-options");
+  //const openOptionsButton = shadow.querySelector<HTMLButtonElement>("#zop-open-options");
   const openOptionsHandler = () => {
     if (chrome?.runtime?.openOptionsPage) {
       chrome.runtime.openOptionsPage();
@@ -293,12 +314,12 @@ export const mountSidebar = () => {
     }
   };
 
-  openOptionsButton?.addEventListener("click", openOptionsHandler);
+  //openOptionsButton?.addEventListener("click", openOptionsHandler);
 
   const openOptionsFunnelButton = shadow.querySelector<HTMLButtonElement>("[data-action='open-options']");
   openOptionsFunnelButton?.addEventListener("click", openOptionsHandler);
 
-  const openPixButton = shadow.querySelector<HTMLButtonElement>("#zop-open-pix");
+  //const openPixButton = shadow.querySelector<HTMLButtonElement>("#zop-open-pix");
 
   async function openPixModal() {
     if (document.getElementById("zop-pix-backdrop")) {
@@ -470,9 +491,9 @@ export const mountSidebar = () => {
     });
   }
 
-  openPixButton?.addEventListener("click", () => {
+  /*openPixButton?.addEventListener("click", () => {
     void openPixModal();
-  });
+  });*/
 
   const COMPOSER_SELECTOR = "#main > footer ._1oI7S > div, #main > footer ._3wpi1 > div, #main > footer ._3uMse > div, #main > footer ._3h5ME > div";
   const ensureComposerButton = () => {
@@ -506,16 +527,12 @@ export const mountSidebar = () => {
   startComposerObserver();
 
   let collapsed = true;
-  setCollapsed(shell, collapsed, layout);
+  setCollapsed(shell, collapsed, layout, host);
 
   const toggleCollapsed = () => {
     collapsed = !collapsed;
-    setCollapsed(shell, collapsed, layout);
+    setCollapsed(shell, collapsed, layout, host);
   };
-
-  toggle.addEventListener("click", () => {
-    toggleCollapsed();
-  });
 
   document.addEventListener("keydown", (event) => {
     if (!event.ctrlKey || !event.shiftKey || event.code !== TOGGLE_SHORTCUT) {
@@ -542,14 +559,14 @@ export const mountSidebar = () => {
       if (collapsed) {
         setActivePanel(panelId);
         collapsed = false;
-        setCollapsed(shell, collapsed, layout);
+        setCollapsed(shell, collapsed, layout, host);
         return;
       }
 
       const isSamePanel = item.classList.contains("is-active");
       if (isSamePanel) {
         collapsed = true;
-        setCollapsed(shell, collapsed, layout);
+        setCollapsed(shell, collapsed, layout, host);
         return;
       }
 
@@ -562,6 +579,7 @@ export const mountSidebar = () => {
   const wppStatus = shadow.querySelector<HTMLElement>("#zop-wpp-status");
   const funnelTotal = shadow.querySelector<HTMLElement>("#zop-funnel-total");
   const activeChatLabel = shadow.querySelector<HTMLElement>("#zop-active-chat");
+  const activeChatCard = shadow.querySelector<HTMLElement>(".zop-funnel__active");
   const funnelList = shadow.querySelector<HTMLElement>("#zop-funnel-list");
   const funnelEmpty = shadow.querySelector<HTMLElement>("#zop-funnel-empty");
   const funnelSearch = shadow.querySelector<HTMLInputElement>("#zop-funnel-search");
@@ -569,7 +587,6 @@ export const mountSidebar = () => {
   const quickReplyEmpty = shadow.querySelector<HTMLElement>("#zop-quickreply-empty");
   const runsList = shadow.querySelector<HTMLElement>("#zop-runs-list");
   const runsEmpty = shadow.querySelector<HTMLElement>("#zop-runs-empty");
-  const refreshButton = shadow.querySelector<HTMLButtonElement>("#zop-refresh-chat");
 
   let funnels: Funnel[] = [];
   let quickReplies: QuickReply[] = [];
@@ -578,6 +595,14 @@ export const mountSidebar = () => {
   let funnelFilter = "";
   let runnerBound = false;
   const runs = new Map<string, FunnelRunView>();
+  const hasActiveRunForChat = (chatId: string) => {
+    for (const run of runs.values()) {
+      if (run.chatId === chatId && run.status === "running") {
+        return true;
+      }
+    }
+    return false;
+  };
 
   const updateTotals = () => {
     if (!funnelTotal) {
@@ -692,7 +717,7 @@ export const mountSidebar = () => {
             chatId: string;
             lead: LeadCard;
             integrationSettings: IntegrationSettings;
-          }) => string;
+          }) => string | null;
           cancel: (runId: string) => void;
           pause: (runId: string) => void;
           resume: (runId: string) => void;
@@ -1130,10 +1155,11 @@ export const mountSidebar = () => {
     integrationSettings = { ...DEFAULT_INTEGRATION_SETTINGS, ...(stored ?? {}) };
   };
 
-  const refreshActiveChat = async () => {
+  const refreshActiveChat = async (): Promise<ActiveChat | null> => {
     const chat = await requestActiveChat();
     activeChat = chat;
     updateActiveChatUI();
+    return chat;
   };
 
   const createLeadFromChat = (chat: ActiveChat): LeadCard => ({
@@ -1156,6 +1182,13 @@ export const mountSidebar = () => {
       return;
     }
 
+    if (hasActiveRunForChat(chat.id)) {
+      if (activeChatLabel) {
+        activeChatLabel.textContent = "Envio já em andamento para esta conversa";
+      }
+      return;
+    }
+
     const runner = getFunnelRunner();
     if (!runner) {
       if (activeChatLabel) {
@@ -1171,6 +1204,13 @@ export const mountSidebar = () => {
       lead,
       integrationSettings
     });
+
+    if (!runId) {
+      if (activeChatLabel) {
+        activeChatLabel.textContent = "Envio já em andamento para esta conversa";
+      }
+      return;
+    }
 
     runs.set(runId, {
       runId,
@@ -1238,9 +1278,15 @@ export const mountSidebar = () => {
     renderFunnelList();
   });
 
-  refreshButton?.addEventListener("click", () => {
-    void refreshActiveChat();
-  });
+  const handleActiveChatClick = async () => {
+    const chat = await refreshActiveChat();
+    if (!chat && activeChatLabel) {
+      activeChatLabel.textContent = "Nenhuma conversa ativa";
+    }
+  };
+
+  activeChatLabel?.addEventListener("click", handleActiveChatClick);
+  activeChatCard?.addEventListener("click", handleActiveChatClick);
 
   void Promise.all([loadFunnels(), loadQuickReplies(), loadIntegrationSettings()]).then(() => {
     updateTotals();

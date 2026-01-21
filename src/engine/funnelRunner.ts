@@ -58,6 +58,7 @@ type SendMessageResult = {
 };
 
 const runs = new Map<string, FunnelRunState>();
+const activeChats = new Map<string, string>();
 
 const listeners = {
   stepStart: new Set<Listener<FunnelStepEvent>>(),
@@ -875,11 +876,18 @@ const runFunnelSequence = async (runId: string, input: FunnelRunInput) => {
     error: state.error
   });
   runs.delete(runId);
+  activeChats.delete(chatId);
   log("Run finished", runId, status);
 };
 
 export const runFunnel = (input: FunnelRunInput) => {
+  if (activeChats.has(input.chatId)) {
+    warn("Run already active for chat", input.chatId);
+    return null;
+  }
+
   const runId = createRunId();
+  activeChats.set(input.chatId, runId);
   runs.set(runId, { cancelled: false, paused: false });
   void runFunnelSequence(runId, input);
   return runId;

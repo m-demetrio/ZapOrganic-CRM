@@ -9,8 +9,8 @@ importers:
   .:
     dependencies:
       '@wppconnect/wa-js':
-        specifier: ^3.19.7
-        version: 3.19.7
+        specifier: ^3.19.8
+        version: 3.19.8
     devDependencies:
       '@crxjs/vite-plugin':
         specifier: ^2.0.0
@@ -446,8 +446,8 @@ packages:
   '@webcomponents/custom-elements@1.6.0':
     resolution: {integrity: sha512-CqTpxOlUCPWRNUPZDxT5v2NnHXA4oox612iUGnmTUGQFhZ1Gkj8kirtl/2wcF6MqX7+PqqicZzOCBKKfIn0dww==}
 
-  '@wppconnect/wa-js@3.19.7':
-    resolution: {integrity: sha512-hv5pVBQ/PjI7Z4waVNdPoIMnmxTVTVq6Y3XIwz22xiuLZ2gMIjJuG7cpZ1roUbX0un4Aoyl3gZSqENNLNBhNZQ==}
+  '@wppconnect/wa-js@3.19.8':
+    resolution: {integrity: sha512-IlyaK7YzS3y1qTDnmhkUuAqif6+4x+w48XKr6toEd18rp8BmxBzJfaIk8V2vRnXlZcD4n+vfFK8M4aspBdIlDg==}
     engines: {whatsapp-web: '>=2.2326.10-beta'}
 
   acorn-jsx@5.3.2:
@@ -1395,7 +1395,7 @@ snapshots:
 
   '@webcomponents/custom-elements@1.6.0': {}
 
-  '@wppconnect/wa-js@3.19.7': {}
+  '@wppconnect/wa-js@3.19.8': {}
 
   acorn-jsx@5.3.2(acorn@8.15.0):
     dependencies:
