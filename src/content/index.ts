@@ -26,9 +26,10 @@ const PIX_COMPOSER_HOST_SELECTORS = [
   "#main > footer > div > div",
   "[data-testid='conversation-compose-box']"
 ] as const;
-
 const CHAT_BAR_ID = "zop-chat-bar";
 const CHAT_BAR_STYLE_ID = "zop-chat-bar-style";
+const CHAT_BAR_TOGGLE_ID = "zop-chat-toggle";
+const CHAT_BAR_ENABLED_KEY = "zopChatBarEnabled";
 const CHAT_BAR_TYPE_BUTTON_ID = "zop-chat-bar-type-button";
 const CHAT_BAR_TYPE_MENU_ID = "zop-chat-bar-type-menu";
 const CHAT_BAR_TYPES = ["Textos", "Áudios", "Imagens", "Vídeos", "Funil", "Outros"] as const;
@@ -878,8 +879,14 @@ const startComposerObserver = () => {
   }
   composerObserver = new MutationObserver(() => {
     void mountPixComposerButton();
-    void mountChatFunnelBar();
-  });
+    void mountChatToggleButton();
+      if (chatBarEnabled) {
+        void mountChatFunnelBar();
+      } else {
+        const panel = document.getElementById(CHAT_BAR_ID);
+        panel?.classList.add("is-muted");
+      }
+    });
   composerObserver.observe(document.body, { childList: true, subtree: true });
 };
 
@@ -898,7 +905,7 @@ const ensureChatBarStyles = () => {
       --zop-chat-border: rgba(158, 87, 248, 0.45);
       width: auto;
       max-width: 100%;
-      margin: 0;
+      margin: 0 10px 0 10px;
       padding: 10px 14px;
       background: rgba(8, 8, 18, 0.92);
       border-radius: 18px;
@@ -912,6 +919,12 @@ const ensureChatBarStyles = () => {
       color: #f2eaff;
       position: relative;
       overflow: visible;
+      z-index: 10;
+    }
+    #${CHAT_BAR_ID}.is-muted {
+      opacity: 0.28;
+      pointer-events: none;
+      filter: saturate(0.7);
     }
     #${CHAT_BAR_ID}::before,
     #${CHAT_BAR_ID}::after {
@@ -932,6 +945,26 @@ const ensureChatBarStyles = () => {
     }
     #${CHAT_BAR_ID} * {
       box-sizing: border-box;
+    }
+    .zop-chat-toggle-button {
+      width: 36px;
+      height: 36px;
+      border-radius: 12px;
+      border: 1px solid rgba(255, 255, 255, 0.5);
+      background: rgba(255, 255, 255, 0.05);
+      color: #f2eaff;
+      font-weight: 700;
+      font-size: 18px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      transition: border-color 0.2s ease, background 0.2s ease, color 0.2s ease;
+    }
+    .zop-chat-toggle-button.is-active {
+      border-color: rgba(37, 211, 102, 0.7);
+      background: rgba(37, 211, 102, 0.25);
+      color: #25d366;
     }
     .zop-chat-bar__row {
       display: grid;
@@ -1222,6 +1255,7 @@ const ensureChatBarStyles = () => {
 
 let chatBarResizeObserver: ResizeObserver | null = null;
 let chatBarResizeListenerBound = false;
+let chatBarEnabled = true;
 
 const syncChatBarPosition = () => {
   const panel = document.getElementById(CHAT_BAR_ID);
@@ -1271,6 +1305,50 @@ const locateChatFooter = () => {
 
   const footer = host.closest("footer");
   return footer ?? host.parentElement;
+};
+
+const persistChatBarPreference = (enabled: boolean) => {
+  try {
+    if (typeof chrome !== "undefined" && chrome?.storage?.local) {
+      chrome.storage.local.set({ [CHAT_BAR_ENABLED_KEY]: enabled });
+      return;
+    }
+    if (typeof localStorage !== "undefined") {
+      localStorage.setItem(CHAT_BAR_ENABLED_KEY, enabled ? "1" : "0");
+    }
+  } catch (error) {
+    console.warn("[ZOP][CHAT-BAR] Falha ao salvar preferencia", error);
+  }
+};
+
+const loadChatBarPreference = async (): Promise<boolean> => {
+  if (typeof chrome !== "undefined" && chrome?.storage?.local) {
+    return new Promise((resolve) => {
+      chrome.storage.local.get(CHAT_BAR_ENABLED_KEY, (items) => {
+        if (typeof items?.[CHAT_BAR_ENABLED_KEY] === "boolean") {
+          resolve(items[CHAT_BAR_ENABLED_KEY]);
+          return;
+        }
+        resolve(true);
+      });
+    });
+  }
+
+  try {
+    if (typeof localStorage !== "undefined") {
+      const stored = localStorage.getItem(CHAT_BAR_ENABLED_KEY);
+      if (stored === "0") {
+        return false;
+      }
+      if (stored === "1") {
+        return true;
+      }
+    }
+  } catch {
+    //
+  }
+
+  return true;
 };
 
 const createChatBarElement = () => {
@@ -1422,6 +1500,19 @@ const setupChatBarInteractions = (panel: HTMLElement) => {
       if (changes[FUNNEL_STORAGE_KEY] || changes[QUICK_REPLY_STORAGE_KEY] || changes[SETTINGS_STORAGE_KEY]) {
         void loadChatBarData();
       }
+      if (changes[CHAT_BAR_ENABLED_KEY]) {
+        const { newValue } = changes[CHAT_BAR_ENABLED_KEY];
+        const next =
+          typeof newValue === "boolean"
+            ? newValue
+            : newValue === "0"
+              ? false
+              : newValue === "1"
+                ? true
+                : Boolean(newValue);
+        chatBarEnabled = next;
+        applyChatBarState(next);
+      }
     });
     chatBarStorageListenerBound = true;
   }
@@ -1430,6 +1521,9 @@ const setupChatBarInteractions = (panel: HTMLElement) => {
 };
 
 const mountChatFunnelBar = () => {
+  if (!chatBarEnabled) {
+    return;
+  }
   ensureChatBarStyles();
   const footer = locateChatFooter();
   if (!footer) {
@@ -1451,6 +1545,76 @@ const mountChatFunnelBar = () => {
   syncChatBarPosition();
   observeChatBarComposerResize();
   ensureChatBarWindowListener();
+};
+
+const updateChatToggleButtonState = () => {
+  const buttons = Array.from(document.querySelectorAll<HTMLButtonElement>(`#${CHAT_BAR_TOGGLE_ID}`));
+  buttons.forEach((button) => {
+    button.classList.toggle("is-active", chatBarEnabled);
+    button.setAttribute("aria-pressed", chatBarEnabled ? "true" : "false");
+    button.setAttribute("aria-label", chatBarEnabled ? "Desativar chat bar" : "Ativar chat bar");
+    button.title = chatBarEnabled ? "Desativar chat bar" : "Ativar chat bar";
+    button.textContent = chatBarEnabled ? "💬" : "💤";
+  });
+};
+
+const applyChatBarState = (enabled: boolean) => {
+  chatBarEnabled = enabled;
+  if (enabled) {
+    void mountChatFunnelBar();
+  }
+  const panel = document.getElementById(CHAT_BAR_ID);
+  if (enabled) {
+    panel?.classList.remove("is-muted");
+  } else if (panel) {
+    panel.remove();
+  }
+  updateChatToggleButtonState();
+};
+
+const toggleChatBar = () => {
+  const next = !chatBarEnabled;
+  applyChatBarState(next);
+  persistChatBarPreference(next);
+};
+
+const ensureChatToggleButton = async () => {
+  const host = locateComposerHost();
+  if (!host) {
+    return;
+  }
+
+  const existing = host.querySelector<HTMLButtonElement>(`#${CHAT_BAR_TOGGLE_ID}`);
+  if (existing) {
+    return;
+  }
+
+  const activeChat = await requestActiveChat();
+  if (!activeChat || activeChat.isGroup) {
+    return;
+  }
+
+  const button = document.createElement("button");
+  button.id = CHAT_BAR_TOGGLE_ID;
+  button.type = "button";
+  button.className = "zop-pix-inline-button zop-chat-toggle-button";
+  button.addEventListener("click", () => toggleChatBar());
+  button.setAttribute("aria-label", "Alternar chat bar");
+  button.setAttribute("aria-pressed", chatBarEnabled ? "true" : "false");
+  button.textContent = chatBarEnabled ? "⚡" : "💤";
+
+  const pixButton = host.querySelector<HTMLElement>("#zop-pix-inline");
+  if (pixButton && host.contains(pixButton)) {
+    host.insertBefore(button, pixButton);
+  } else {
+    host.prepend(button);
+  }
+
+  updateChatToggleButtonState();
+};
+
+const mountChatToggleButton = async () => {
+  await ensureChatToggleButton();
 };
 
 const injectPageScript = (filePath: string, type: "text/javascript" = "text/javascript") => {
@@ -1477,15 +1641,19 @@ const init = () => {
   exposeFunnelRunner();
 };
 
-const startExtension = () => {
+const startExtension = async () => {
   init();
-  mountChatFunnelBar();
+  chatBarEnabled = await loadChatBarPreference();
+  applyChatBarState(chatBarEnabled);
   void mountPixComposerButton();
+  void mountChatToggleButton();
   startComposerObserver();
 };
 
 if (document.readyState === "loading") {
-  document.addEventListener("DOMContentLoaded", startExtension, { once: true });
+  document.addEventListener("DOMContentLoaded", () => {
+    void startExtension();
+  }, { once: true });
 } else {
-  startExtension();
+  void startExtension();
 }

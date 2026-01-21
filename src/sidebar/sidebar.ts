@@ -88,7 +88,7 @@ const getWaLayoutRoot = (): HTMLElement | null => {
 const applyShift = (width: number) => {
   const root = getWaLayoutRoot();
   if (root) {
-    root.style.setProperty("padding-right", `calc(${width}px + 12px)`);
+    root.style.setProperty("padding-right", `calc(${width}px + 5px)`);
     root.style.setProperty("box-sizing", "border-box");
   }
 
