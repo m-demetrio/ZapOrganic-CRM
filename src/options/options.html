@@ -38,7 +38,7 @@
           Arraste as etapas ou use os botoes Up/Down para organizar o fluxo. Os uploads ficam salvos no banco local.
         </p>
 
-        <div class="grid grid--two">
+        <div class="grid">
           <div class="card">
             <div class="card__header">
               <div>
@@ -52,50 +52,93 @@
               <div class="empty__text">Crie um funil para comecar.</div>
             </div>
           </div>
+        </div>
 
-          <div class="card">
-            <div class="card__header">
-              <div>
-                <div class="card__title">Editor do funil</div>
-                <div class="card__subtitle" id="zop-funnel-editor-title">Novo funil</div>
-              </div>
-              <div class="card__actions">
-                <button class="button button--ghost" id="zop-delete-funnel" type="button" disabled>
-                  Excluir
-                </button>
-                <button class="button" id="zop-save-funnel" type="button">Salvar</button>
-              </div>
+        <div class="funnel-editor-screen" id="zop-funnel-editor-screen" aria-hidden="true">
+          <div class="funnel-editor__content">
+            <div class="funnel-editor__header">
+              <button class="button button--ghost funnel-editor__back" id="zop-funnel-editor-close" type="button">
+                Voltar
+              </button>
+              <div class="funnel-editor__title">Cadastro de funil</div>
             </div>
 
-            <div class="form">
-              <label class="field">
-                <span>Nome</span>
-                <input class="input" id="zop-funnel-name" type="text" placeholder="Ex: Pos-venda" />
-              </label>
-              <label class="field">
-                <span>Descricao</span>
-                <textarea
-                  class="input input--area"
-                  id="zop-funnel-description"
-                  rows="3"
-                  placeholder="Resumo do funil"
-                ></textarea>
-              </label>
-            </div>
+            <div class="funnel-editor__layout">
+              <div class="funnel-editor__form">
+                <div class="card">
+                  <div class="card__header">
+                    <div>
+                      <div class="card__title">Editor do funil</div>
+                      <div class="card__subtitle" id="zop-funnel-editor-title">Novo funil</div>
+                    </div>
+                    <div class="card__actions">
+                      <button class="button button--ghost" id="zop-delete-funnel" type="button" disabled>
+                        Excluir
+                      </button>
+                      <button class="button" id="zop-save-funnel" type="button">Salvar</button>
+                    </div>
+                  </div>
 
-            <div class="steps">
-              <div class="steps__header">
-                <div>
-                  <div class="card__title">Etapas</div>
-                  <div class="card__subtitle">Adicione textos, delays, tags ou webhooks.</div>
+                  <div class="form">
+                    <label class="field">
+                      <span>Nome</span>
+                      <input class="input" id="zop-funnel-name" type="text" placeholder="Ex: Pos-venda" />
+                    </label>
+                    <label class="field">
+                      <span>Descricao</span>
+                      <textarea
+                        class="input input--area"
+                        id="zop-funnel-description"
+                        rows="3"
+                        placeholder="Resumo do funil"
+                      ></textarea>
+                    </label>
+                  </div>
+
+                  <div class="steps">
+                    <div class="steps__header">
+                      <div>
+                        <div class="card__title">Etapas</div>
+                        <div class="card__subtitle">Adicione textos, delays, tags ou webhooks.</div>
+                      </div>
+                      <button class="button button--ghost" id="zop-add-step" type="button">Adicionar etapa</button>
+                    </div>
+                    <div class="steps__list" id="zop-steps-list"></div>
+                    <div class="empty" id="zop-steps-empty">
+                      <div class="empty__title">Sem etapas</div>
+                      <div class="empty__text">Adicione a primeira etapa do funil.</div>
+                    </div>
+                  </div>
                 </div>
-                <button class="button button--ghost" id="zop-add-step" type="button">Adicionar etapa</button>
               </div>
-              <div class="steps__list" id="zop-steps-list"></div>
-              <div class="empty" id="zop-steps-empty">
-                <div class="empty__title">Sem etapas</div>
-                <div class="empty__text">Adicione a primeira etapa do funil.</div>
-              </div>
+
+              <aside class="funnel-preview">
+                <div class="funnel-preview__header">
+                  <div class="funnel-preview__title">Preview do WhatsApp</div>
+                  <div class="funnel-preview__subtitle">Veja como a etapa aparece no chat.</div>
+                </div>
+                <div class="funnel-preview__device">
+                  <div class="funnel-preview__topbar">
+                    <div class="funnel-preview__avatar">ZO</div>
+                    <div>
+                      <div class="funnel-preview__name">ZapOrganic</div>
+                      <div class="funnel-preview__status">Online</div>
+                    </div>
+                  </div>
+                  <div class="funnel-preview__chat" id="zop-funnel-preview-chat"></div>
+                  <div class="funnel-preview__composer" aria-hidden="true">
+                    <div class="funnel-preview__composer-icon">😊</div>
+                    <div class="funnel-preview__composer-field">Mensagem</div>
+                    <div class="funnel-preview__composer-actions">
+                      <span class="funnel-preview__composer-pill">📎</span>
+                      <span class="funnel-preview__composer-pill">🎤</span>
+                    </div>
+                  </div>
+                </div>
+                <div class="funnel-preview__hint" id="zop-funnel-preview-hint">
+                  Clique em uma etapa para visualizar o conteudo.
+                </div>
+              </aside>
             </div>
           </div>
         </div>
@@ -194,9 +237,14 @@
                     />
                     <span class="media__file-label" id="zop-quickreply-media-file-label">Nenhum arquivo selecionado</span>
                   </label>
-                  <label class="field">
+                  <label class="field quickreply-media__field quickreply-media__field--caption">
                     <span>Legenda (opcional)</span>
-                    <input class="input" id="zop-quickreply-media-caption" type="text" placeholder="Legenda" />
+                    <textarea
+                      class="input input--area input--caption"
+                      id="zop-quickreply-media-caption"
+                      rows="4"
+                      placeholder="Legenda"
+                    ></textarea>
                   </label>
                   <label class="field">
                     <span>Nome exibido</span>

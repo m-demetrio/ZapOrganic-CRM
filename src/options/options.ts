@@ -57,6 +57,34 @@ const parseNumber = (value: string) => {
   return Number.isFinite(parsed) ? parsed : undefined;
 };
 
+const escapeHtml = (value: string) =>
+  value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+
+const parsePreviewText = (text: string) => {
+  if (!text) {
+    return "";
+  }
+
+  let formatted = escapeHtml(text);
+  formatted = formatted.replace(/\*(.*?)\*/g, (_match, group) => `<strong>${group}</strong>`);
+  formatted = formatted.replace(/_(.*?)_/g, (_match, group) => `<em>${group}</em>`);
+  formatted = formatted.replace(/~(.*?)~/g, (_match, group) => `<del>${group}</del>`);
+  formatted = formatted.replace(/\r\n|\r|\n/g, "<br>");
+  return formatted;
+};
+
+const formatDuration = (seconds?: number) => {
+  const total = Number.isFinite(seconds ?? NaN) ? Math.max(0, Math.floor(seconds ?? 0)) : 0;
+  const minutes = Math.floor(total / 60);
+  const secs = total % 60;
+  return `${minutes}:${String(secs).padStart(2, "0")}`;
+};
+
 const readFileAsDataUrl = (file: File) =>
   new Promise<{ data: string; mimeType: string; fileName: string }>((resolve, reject) => {
     const reader = new FileReader();
@@ -388,6 +416,10 @@ const init = async () => {
   const saveFunnelButton = root.querySelector<HTMLButtonElement>("#zop-save-funnel");
   const deleteFunnelButton = root.querySelector<HTMLButtonElement>("#zop-delete-funnel");
   const addStepButton = root.querySelector<HTMLButtonElement>("#zop-add-step");
+  const funnelEditorScreen = root.querySelector<HTMLElement>("#zop-funnel-editor-screen");
+  const funnelEditorClose = root.querySelector<HTMLButtonElement>("#zop-funnel-editor-close");
+  const funnelPreviewChat = root.querySelector<HTMLElement>("#zop-funnel-preview-chat");
+  const funnelPreviewHint = root.querySelector<HTMLElement>("#zop-funnel-preview-hint");
 
   const quickReplyList = root.querySelector<HTMLElement>("#zop-quickreply-list");
   const quickReplyEmpty = root.querySelector<HTMLElement>("#zop-quickreply-empty");
@@ -396,7 +428,7 @@ const init = async () => {
   const quickReplyMessageInput = root.querySelector<HTMLTextAreaElement>("#zop-quickreply-message");
   const quickReplyVariablesInput = root.querySelector<HTMLInputElement>("#zop-quickreply-variables");
   const quickReplyTypeInput = root.querySelector<HTMLSelectElement>("#zop-quickreply-type");
-  const quickReplyMediaCaptionInput = root.querySelector<HTMLInputElement>("#zop-quickreply-media-caption");
+  const quickReplyMediaCaptionInput = root.querySelector<HTMLTextAreaElement>("#zop-quickreply-media-caption");
   const quickReplyFileNameInput = root.querySelector<HTMLInputElement>("#zop-quickreply-file-name");
   const quickReplyMediaSection = root.querySelector<HTMLElement>("#zop-quickreply-media");
   const quickReplyMediaFileInput = root.querySelector<HTMLInputElement>("#zop-quickreply-media-file");
@@ -421,6 +453,7 @@ const init = async () => {
   let integrationSettings: IntegrationSettings = DEFAULT_INTEGRATION_SETTINGS;
   let activeFunnel = createEmptyFunnel();
   let activeQuickReplyId: string | null = null;
+  let activePreviewStepId: string | null = null;
   const payloadDrafts = new Map<string, string>();
   const quickReplyMediaCache = new Map<string, { mediaId?: string; fileName?: string }>();
   const pendingMediaUploads = new Map<string, Promise<void>>();
@@ -444,6 +477,170 @@ const init = async () => {
     const [step] = activeFunnel.steps.splice(fromIndex, 1);
     activeFunnel.steps.splice(toIndex, 0, step);
     renderSteps();
+  };
+
+  const toggleFunnelEditor = (open: boolean) => {
+    if (!funnelEditorScreen) {
+      return;
+    }
+    funnelEditorScreen.classList.toggle("is-active", open);
+    funnelEditorScreen.setAttribute("aria-hidden", open ? "false" : "true");
+    document.body.style.overflow = open ? "hidden" : "";
+  };
+
+  const selectPreviewStep = (stepId: string | null) => {
+    activePreviewStepId = stepId;
+    if (stepsList) {
+      stepsList.querySelectorAll(".step.is-selected").forEach((element) => {
+        element.classList.remove("is-selected");
+      });
+      if (stepId) {
+        const selected = stepsList.querySelector<HTMLElement>(`[data-step-id="${stepId}"]`);
+        selected?.classList.add("is-selected");
+      }
+    }
+    renderFunnelPreview();
+  };
+
+  const shouldShowCaptionField = (type: FunnelStep["type"]) => type === "image" || type === "video";
+  const updateCaptionFieldVisibility = (element: HTMLElement, type: FunnelStep["type"]) => {
+    const captionField = element.querySelector<HTMLElement>(".step__caption-field");
+    if (!captionField) {
+      return;
+    }
+    captionField.classList.toggle("is-visible", shouldShowCaptionField(type));
+  };
+
+  const getPreviewStep = () => {
+    if (activePreviewStepId) {
+      const selected = activeFunnel.steps.find((step) => step.id === activePreviewStepId);
+      if (selected) {
+        return selected;
+      }
+    }
+    return activeFunnel.steps[activeFunnel.steps.length - 1] ?? null;
+  };
+
+  const renderFunnelPreview = () => {
+    if (!funnelPreviewChat) {
+      return;
+    }
+
+    const step = getPreviewStep();
+    funnelPreviewChat.innerHTML = "";
+    if (!step) {
+      if (funnelPreviewHint) {
+        funnelPreviewHint.textContent = "Adicione uma etapa para ver o preview.";
+      }
+      return;
+    }
+
+    if (funnelPreviewHint) {
+      funnelPreviewHint.textContent = "Clique em uma etapa para visualizar o conteudo.";
+    }
+
+    const bubble = document.createElement("div");
+    const isSystem = ["delay", "tag", "webhook"].includes(step.type);
+    bubble.className = `funnel-preview__bubble${isSystem ? " funnel-preview__bubble--system" : " funnel-preview__bubble--out"}`;
+
+    const renderCaption = (source: string) => {
+      if (!source?.trim()) {
+        return null;
+      }
+      const caption = document.createElement("div");
+      caption.className = "funnel-preview__meta";
+      caption.innerHTML = parsePreviewText(source.trim());
+      return caption;
+    };
+
+    const renderAudioBubble = () => {
+      bubble.classList.add("funnel-preview__bubble--audio");
+      const audioWrap = document.createElement("div");
+      audioWrap.className = "funnel-preview__audio";
+
+      const controls = document.createElement("div");
+      controls.className = "funnel-preview__audio-controls";
+      const playButton = document.createElement("button");
+      playButton.type = "button";
+      playButton.className = "funnel-preview__audio-play";
+      playButton.setAttribute("aria-label", "Reproduzir audio");
+      playButton.innerHTML = "▶";
+      const waveform = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+      waveform.setAttribute("viewBox", "0 0 120 32");
+      waveform.setAttribute("role", "presentation");
+      waveform.classList.add("funnel-preview__audio-waveform");
+      const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+      path.setAttribute("d", "M2 22 L12 10 L22 18 L32 8 L42 14 L52 8 L62 18 L72 12 L82 24 L92 10 L102 20 L112 6 L118 18");
+      waveform.appendChild(path);
+      controls.append(playButton, waveform);
+
+      const footer = document.createElement("div");
+      footer.className = "funnel-preview__audio-footer";
+      const duration = document.createElement("span");
+      duration.textContent = formatDuration(step.mediaDurationSec);
+      footer.appendChild(duration);
+
+      audioWrap.append(controls, footer);
+
+      return audioWrap;
+    };
+
+    if (step.type === "audio" || step.type === "ptt") {
+      const audioContent = renderAudioBubble();
+      bubble.appendChild(audioContent);
+      const captionEl = renderCaption(step.mediaCaption ?? step.text);
+      if (captionEl) {
+        bubble.appendChild(captionEl);
+      }
+    } else if (MEDIA_STEP_TYPES.has(step.type)) {
+      const mediaWrap = document.createElement("div");
+      mediaWrap.className = "funnel-preview__media";
+      const mediaThumb = document.createElement("div");
+      mediaThumb.className = "funnel-preview__media-thumb";
+      mediaThumb.textContent =
+        step.type === "image"
+          ? "Imagem"
+          : step.type === "video" || step.type === "ptv"
+            ? "Video"
+            : "Arquivo";
+      mediaWrap.appendChild(mediaThumb);
+
+      const captionEl = renderCaption(step.mediaCaption ?? step.text);
+      if (captionEl) {
+        mediaWrap.appendChild(captionEl);
+      } else {
+        const hint = document.createElement("div");
+        hint.className = "funnel-preview__meta";
+        hint.textContent = "Sem legenda";
+        mediaWrap.appendChild(hint);
+      }
+
+      const fileMeta = document.createElement("div");
+      fileMeta.className = "funnel-preview__meta";
+      fileMeta.textContent = step.fileName?.trim() ? `Arquivo: ${step.fileName.trim()}` : "Arquivo sem nome";
+      mediaWrap.appendChild(fileMeta);
+      bubble.appendChild(mediaWrap);
+    } else if (step.type === "text") {
+      bubble.innerHTML = parsePreviewText(step.text?.trim() || "Digite a mensagem da etapa.");
+    } else if (step.type === "delay") {
+      const delayText = step.delayExpr?.trim()
+        ? `Aguardar: ${step.delayExpr.trim()}`
+        : Number.isFinite(step.delaySec)
+          ? `Aguardar ${step.delaySec}s`
+          : "Aguardar tempo configurado";
+      bubble.textContent = delayText;
+    } else if (step.type === "tag") {
+      const tags = step.addTags?.length ? step.addTags.join(", ") : "Sem tags";
+      bubble.textContent = `Adicionar tags: ${tags}`;
+    } else if (step.type === "webhook") {
+      bubble.textContent = step.webhookEvent?.trim()
+        ? `Webhook: ${step.webhookEvent.trim()}`
+        : "Webhook: evento nao informado";
+    } else {
+      bubble.textContent = "Etapa sem conteudo.";
+    }
+
+    funnelPreviewChat.appendChild(bubble);
   };
 
   const updateStepFileLabel = (element: HTMLElement, name?: string) => {
@@ -545,6 +742,7 @@ const init = async () => {
       button.append(info, stepsMeta);
       button.addEventListener("click", () => {
         setActiveFunnel(funnel);
+        toggleFunnelEditor(true);
       });
 
       funnelList.appendChild(button);
@@ -586,6 +784,9 @@ const init = async () => {
         }
         dropTargetElement = stepElement;
         dropTargetElement.classList.add("step--drop-target");
+      });
+      stepElement.addEventListener("click", () => {
+        selectPreviewStep(step.id);
       });
       stepElement.addEventListener("dragleave", () => {
         if (dropTargetElement === stepElement) {
@@ -680,9 +881,9 @@ const init = async () => {
             />
             <span class="media__file-label" data-field="mediaFileLabel">Nenhum arquivo selecionado</span>
           </label>
-          <label class="field">
+          <label class="field step__caption-field">
             <span>Legenda (opcional)</span>
-            <input class="input" data-field="mediaCaption" type="text" placeholder="Texto da legenda" />
+            <textarea class="input input--area input--caption" data-field="mediaCaption" rows="4" placeholder="Texto da legenda"></textarea>
           </label>
           <label class="field">
             <span>Nome do arquivo (ex: documento.pdf)</span>
@@ -706,6 +907,7 @@ const init = async () => {
         typeSelect.value = step.type;
       }
       stepElement.dataset.mediaSource = "file";
+      updateCaptionFieldVisibility(stepElement, step.type);
 
       const textArea = stepElement.querySelector<HTMLTextAreaElement>("textarea[data-field='text']");
       if (textArea) {
@@ -742,7 +944,7 @@ const init = async () => {
       }
 
 
-      const mediaCaptionInput = stepElement.querySelector<HTMLInputElement>("input[data-field='mediaCaption']");
+      const mediaCaptionInput = stepElement.querySelector<HTMLTextAreaElement>("textarea[data-field='mediaCaption']");
       if (mediaCaptionInput) {
         mediaCaptionInput.value = step.mediaCaption ?? "";
       }
@@ -772,15 +974,18 @@ const init = async () => {
         moveDown.disabled = index === activeFunnel.steps.length - 1;
       }
 
+      stepElement.classList.toggle("is-selected", step.id === activePreviewStepId);
       stepsList.appendChild(stepElement);
     });
 
     renderFunnelList();
+    selectPreviewStep(activePreviewStepId ?? activeFunnel.steps[0]?.id ?? null);
   };
 
   const setActiveFunnel = (funnel: Funnel) => {
     activeFunnel = clone(funnel);
     payloadDrafts.clear();
+    activePreviewStepId = activeFunnel.steps[0]?.id ?? null;
 
     if (funnelNameInput) {
       funnelNameInput.value = activeFunnel.name ?? "";
@@ -1216,12 +1421,14 @@ const init = async () => {
   };
 
   const addStep = () => {
-    activeFunnel.steps.push({
+    const newStep = {
       id: createId("step"),
       type: "text",
       text: "",
       mediaSource: DEFAULT_MEDIA_SOURCE
-    });
+    };
+    activeFunnel.steps.push(newStep);
+    activePreviewStepId = newStep.id;
     renderSteps();
   };
 
@@ -1266,10 +1473,12 @@ const init = async () => {
     } else if (field === "payloadTemplate") {
       payloadDrafts.set(step.id, (target as HTMLTextAreaElement).value);
     } else if (field === "mediaCaption") {
-      step.mediaCaption = (target as HTMLInputElement).value;
+      step.mediaCaption = (target as HTMLTextAreaElement).value;
     } else if (field === "fileName") {
       step.fileName = (target as HTMLInputElement).value;
     }
+
+    selectPreviewStep(step.id);
   });
 
   stepsList?.addEventListener("change", (event) => {
@@ -1292,6 +1501,8 @@ const init = async () => {
     if (field === "type") {
       step.type = (target as HTMLSelectElement).value as FunnelStep["type"];
       stepElement.dataset.stepType = step.type;
+      updateCaptionFieldVisibility(stepElement, step.type);
+      selectPreviewStep(step.id);
       return;
     }
 
@@ -1300,6 +1511,7 @@ const init = async () => {
       step.mediaDurationMode = value;
       stepElement.dataset.mediaDurationMode = value;
       updateStepDurationHint(stepElement, step, value);
+      selectPreviewStep(step.id);
       return;
     }
 
@@ -1314,6 +1526,7 @@ const init = async () => {
         step.mediaDurationSec = undefined;
         updateStepFileLabel(stepElement, undefined);
         updateStepDurationHint(stepElement, step, step.mediaDurationMode ?? DEFAULT_MEDIA_DURATION_MODE);
+        selectPreviewStep(step.id);
         return;
       }
 
@@ -1355,6 +1568,7 @@ const init = async () => {
         });
 
       pendingMediaUploads.set(uploadKey, uploadPromise);
+      selectPreviewStep(step.id);
       return;
     }
   });
@@ -1393,10 +1607,14 @@ const init = async () => {
 
   newFunnelButton?.addEventListener("click", () => {
     setActiveFunnel(createEmptyFunnel());
+    toggleFunnelEditor(true);
   });
   addStepButton?.addEventListener("click", addStep);
   saveFunnelButton?.addEventListener("click", () => void saveFunnels());
   deleteFunnelButton?.addEventListener("click", () => void deleteFunnel());
+  funnelEditorClose?.addEventListener("click", () => {
+    toggleFunnelEditor(false);
+  });
 
   quickReplyTitleInput?.addEventListener("input", () => {
     updateQuickReplyEditorTitle();
