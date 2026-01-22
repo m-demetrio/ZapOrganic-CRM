@@ -28,6 +28,11 @@ const DURATION_MODE_LABELS: Record<MediaDurationMode, string> = {
   manual: "Usar tempo manual (aleatório)",
   file: "Usar duração do arquivo"
 };
+const VIDEO_RECAD_MAX_SECONDS = 60;
+const formatDurationMinutes = (seconds: number) => {
+  const minutes = Math.max(1, Math.ceil(seconds / 60));
+  return `${minutes} minuto${minutes === 1 ? "" : "s"}`;
+};
 const QUICK_REPLY_STAGE_KEY = "draft";
 
 type StatusTone = "info" | "success" | "error";
@@ -387,6 +392,10 @@ const init = async () => {
     } else if (tone === "error") {
       statusPill.classList.add("status-pill--error");
     }
+  };
+  const showVideoRecadoLimitError = (context: string, durationSec: number) => {
+    const minutesLabel = formatDurationMinutes(durationSec);
+    setStatus(`${context} aceita vídeos de até 1 minuto. O arquivo atual tem ${minutesLabel}.`, "error");
   };
 
   const tabs = Array.from(root.querySelectorAll<HTMLButtonElement>(".tab"));
@@ -1530,7 +1539,6 @@ const init = async () => {
         return;
       }
 
-      step.fileName = file.name;
       const fileLabel = stepElement.querySelector<HTMLElement>("[data-field='mediaFileLabel']");
       if (fileLabel) {
         fileLabel.textContent = `Arquivo: ${file.name}`;
@@ -1541,20 +1549,36 @@ const init = async () => {
         .then(async (result) => {
           const shouldConvertToOgg = step.type === "ptt";
           const normalized = await ensureOggDataUrl(result.data, result.mimeType, shouldConvertToOgg);
-          const mediaId = await putMedia(
-            normalized.dataUrl,
-            normalized.mimeType,
-            applyOggExtension(result.fileName, normalized.mimeType) ?? result.fileName
-          );
+
+          const isDurationAware = ["audio", "ptt", "ptv", "video"].includes(step.type);
+          let duration: number | undefined;
+          if (isDurationAware) {
+            const kind = step.type === "video" || step.type === "ptv" ? "video" : "audio";
+            duration = await estimateMediaDuration(normalized.dataUrl, kind);
+          }
+
+          if (step.type === "ptv" && typeof duration === "number" && duration > VIDEO_RECAD_MAX_SECONDS) {
+            fileInput.value = "";
+            step.mediaId = undefined;
+            step.mediaFileData = undefined;
+            step.mediaMimeType = undefined;
+            step.fileName = undefined;
+            step.mediaDurationSec = undefined;
+            updateStepFileLabel(stepElement, undefined);
+            updateStepDurationHint(stepElement, step, step.mediaDurationMode ?? DEFAULT_MEDIA_DURATION_MODE);
+            showVideoRecadoLimitError("Vídeo recado da etapa", duration);
+            return;
+          }
+
+          const sanitizedFileName = applyOggExtension(file.name, normalized.mimeType) ?? file.name;
+          const mediaId = await putMedia(normalized.dataUrl, normalized.mimeType, sanitizedFileName);
           step.mediaId = mediaId;
           step.mediaFileData = undefined;
           step.mediaMimeType = normalized.mimeType;
-          step.fileName = applyOggExtension(step.fileName ?? result.fileName, normalized.mimeType) ?? result.fileName;
+          step.fileName = sanitizedFileName;
           updateStepFileLabel(stepElement, step.fileName);
 
-          if (["audio", "ptt", "ptv", "video"].includes(step.type)) {
-            const kind = step.type === "video" || step.type === "ptv" ? "video" : "audio";
-            const duration = await estimateMediaDuration(normalized.dataUrl, kind);
+          if (isDurationAware) {
             step.mediaDurationSec = duration || undefined;
             updateStepDurationHint(stepElement, step, step.mediaDurationMode ?? DEFAULT_MEDIA_DURATION_MODE);
           }
@@ -1643,6 +1667,22 @@ const init = async () => {
         const mediaType = (quickReplyTypeInput?.value as QuickReply["mediaType"]) ?? "text";
         const shouldConvertToOgg = mediaType === "ptt";
         const normalized = await ensureOggDataUrl(fileData.data, fileData.mimeType, shouldConvertToOgg);
+
+        if (mediaType === "ptv") {
+          const duration = await estimateMediaDuration(normalized.dataUrl, "video");
+          if (duration > VIDEO_RECAD_MAX_SECONDS) {
+            quickReplyMediaFileInput.value = "";
+            stage.mediaId = undefined;
+            stage.fileName = undefined;
+            if (quickReplyFileNameInput) {
+              quickReplyFileNameInput.value = "";
+            }
+            updateQuickReplyMediaPreview();
+            showVideoRecadoLimitError("Vídeo recado da resposta rápida", duration);
+            return;
+          }
+        }
+
         const normalizedFileName = applyOggExtension(fileData.fileName, normalized.mimeType) ?? fileData.fileName;
         const mediaId = await putMedia(normalized.dataUrl, normalized.mimeType, normalizedFileName);
         stage.mediaId = mediaId;

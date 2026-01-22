@@ -949,6 +949,7 @@ const ensureChatBarStyles = () => {
     .zop-chat-toggle-button {
       width: 36px;
       height: 36px;
+      margin: 4px;
       border-radius: 12px;
       border: 1px solid rgba(255, 255, 255, 0.5);
       background: rgba(255, 255, 255, 0.05);
@@ -1590,7 +1591,7 @@ const ensureChatToggleButton = async () => {
   }
 
   const activeChat = await requestActiveChat();
-  if (!activeChat || activeChat.isGroup) {
+  if (!activeChat) {
     return;
   }
 

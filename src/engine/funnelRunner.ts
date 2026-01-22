@@ -150,6 +150,8 @@ const sendMessageViaPageBridge = (
 
 const PRESENCE_DURATION_MS = 15000;
 const PRESENCE_HOLD_DELAY_MS = 400;
+const PRESENCE_REFRESH_INTERVAL_MS = 12000;
+const MEDIA_DELIVERY_BUFFER_MS = 2000;
 
 const markChatPresence = (chatId: string, type: "mark-composing" | "mark-recording", value: boolean) => {
   if (value) {
@@ -769,13 +771,18 @@ const runFunnelSequence = async (runId: string, input: FunnelRunInput) => {
       } else if (isSending) {
         const presenceType = getPresenceTypeForStep(step);
         let presenceActive = false;
+        let presenceTimer: number | null = null;
 
+        let refreshTimer: number | null = null;
         const activatePresence = () => {
           if (!presenceType || presenceActive) {
             return;
           }
           presenceActive = true;
           markChatPresence(chatId, presenceType, true);
+          refreshTimer = window.setInterval(() => {
+            markChatPresence(chatId, presenceType, true);
+          }, PRESENCE_REFRESH_INTERVAL_MS);
         };
 
         const deactivatePresence = () => {
@@ -783,11 +790,34 @@ const runFunnelSequence = async (runId: string, input: FunnelRunInput) => {
             return;
           }
           presenceActive = false;
+          if (refreshTimer) {
+            window.clearInterval(refreshTimer);
+            refreshTimer = null;
+          }
           markChatPresence(chatId, presenceType, false);
         };
 
-        const shouldUsePresence = Boolean(presenceType) && (step.type !== "text" || Boolean(message));
-        const presenceHoldDelayMs = shouldUsePresence ? PRESENCE_HOLD_DELAY_MS : 0;
+        const MIN_HOLD_MS = PRESENCE_HOLD_DELAY_MS;
+        const shouldUsePresence = Boolean(presenceType && delayMs > 0);
+        const holdDurationMs = shouldUsePresence ? Math.max(MIN_HOLD_MS, Math.floor(delayMs * 0.8)) : 0;
+        const presenceDelayMs = shouldUsePresence ? Math.max(delayMs - holdDurationMs, 0) : 0;
+
+        const schedulePresence = () => {
+          if (!presenceType || delayMs <= 0 || holdDurationMs <= 0) {
+            return;
+          }
+          presenceTimer = window.setTimeout(() => {
+            activatePresence();
+            presenceTimer = null;
+          }, presenceDelayMs);
+        };
+
+        const cancelPresenceTimer = () => {
+          if (presenceTimer) {
+            window.clearTimeout(presenceTimer);
+            presenceTimer = null;
+          }
+        };
 
         try {
           if (shouldUsePresence) {
@@ -804,7 +834,9 @@ const runFunnelSequence = async (runId: string, input: FunnelRunInput) => {
           }
 
           if (delayMs > 0) {
+            schedulePresence();
             await waitWithCancel(runId, delayMs);
+            cancelPresenceTimer();
             if (state.cancelled) {
               break;
             }
@@ -829,17 +861,15 @@ const runFunnelSequence = async (runId: string, input: FunnelRunInput) => {
           } else {
             const sent = await sendMediaStep(runId, chatId, step);
             // Pequeno tempo para o WhatsApp processar a fila do envio de midia
-            if (!state.cancelled && !isPaused(runId)) {
-              await waitWithCancel(runId, 500);
-            }
+        if (!state.cancelled && !isPaused(runId)) {
+          await waitWithCancel(runId, MEDIA_DELIVERY_BUFFER_MS);
+        }
             if (!sent && !state.cancelled) {
               throw new Error("media-unavailable");
             }
           }
         } finally {
-          if (!state.cancelled && presenceHoldDelayMs > 0) {
-            await waitWithCancel(runId, presenceHoldDelayMs);
-          }
+          cancelPresenceTimer();
           deactivatePresence();
         }
       } else {
