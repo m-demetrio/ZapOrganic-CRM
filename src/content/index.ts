@@ -947,25 +947,28 @@ const ensureChatBarStyles = () => {
       box-sizing: border-box;
     }
     .zop-chat-toggle-button {
-      width: 36px;
-      height: 36px;
-      margin: 4px;
-      border-radius: 12px;
-      border: 1px solid rgba(255, 255, 255, 0.5);
-      background: rgba(255, 255, 255, 0.05);
-      color: #f2eaff;
-      font-weight: 700;
-      font-size: 18px;
       display: inline-flex;
       align-items: center;
       justify-content: center;
+      width: 36px;
+      height: 36px;
+      border-radius: 999px;
+      border: 1px solid rgba(88, 101, 242, 0.4);
+      background: #591f6bff;
+      color: #fff;
+      font-size: 20px;
+      margin-right: 6px;
       cursor: pointer;
-      transition: border-color 0.2s ease, background 0.2s ease, color 0.2s ease;
+      transition: transform 0.08s ease, box-shadow 0.2s ease;
+    }
+    #zop-chat-toggle:hover {
+      transform: translateY(-1px);
+      box-shadow: inset 0 0 0 2px rgba(88, 101, 242, 0.6);
     }
     .zop-chat-toggle-button.is-active {
-      border-color: rgba(37, 211, 102, 0.7);
-      background: rgba(37, 211, 102, 0.25);
-      color: #25d366;
+      
+      background: 141418;
+      
     }
     .zop-chat-bar__row {
       display: grid;
@@ -1598,11 +1601,11 @@ const ensureChatToggleButton = async () => {
   const button = document.createElement("button");
   button.id = CHAT_BAR_TOGGLE_ID;
   button.type = "button";
-  button.className = "zop-pix-inline-button zop-chat-toggle-button";
+  button.className = "zop-chat-toggle-button";
   button.addEventListener("click", () => toggleChatBar());
   button.setAttribute("aria-label", "Alternar chat bar");
   button.setAttribute("aria-pressed", chatBarEnabled ? "true" : "false");
-  button.textContent = chatBarEnabled ? "⚡" : "💤";
+  //button.textContent = chatBarEnabled ? "⚡" : "💤";
 
   const pixButton = host.querySelector<HTMLElement>("#zop-pix-inline");
   if (pixButton && host.contains(pixButton)) {
