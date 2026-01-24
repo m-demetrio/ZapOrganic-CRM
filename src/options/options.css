@@ -453,6 +453,7 @@ select {
 .funnel-preview__bubble--audio {
   padding: 14px;
   min-width: 220px;
+  max-height: 80px;
 }
 
 .funnel-preview__bubble--out::after {
@@ -501,7 +502,7 @@ select {
 
 .funnel-preview__audio {
   display: grid;
-  gap: 10px;
+  gap: 1px;
 }
 
 .funnel-preview__audio-controls {
@@ -523,6 +524,15 @@ select {
   display: grid;
   place-items: center;
   box-shadow: 0 6px 12px rgba(0, 0, 0, 0.35);
+}
+.funnel-preview__audio-play::after {
+  content: "";
+  position: absolute;
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  background-image: var(--step-icon-ptt);
+  background-repeat: no-repeat;
 }
 
 .funnel-preview__audio-waveform {
@@ -927,47 +937,118 @@ select {
 }
 
 .step[data-step-type="text"] .step__icon::after {
-  content: "💬";
+  background-image: var(--step-icon-text);
   display: inline-flex;
+  content: "";
   align-items: center;
   justify-content: center;
-  min-width: 20px;
+  min-width: 18px;
+  min-height: 18px;
+  background-repeat: no-repeat;
 }
 
-.step[data-step-type="audio"]::after {
+.step[data-step-type="audio"] .step__icon::after {
   background-image: var(--step-icon-audio);
+  display: inline-flex;
+  content: "";
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  min-height: 18px;
+  background-repeat: no-repeat;
+  background-repeat: no-repeat;
 }
 
-.step[data-step-type="ptt"]::after {
+.step[data-step-type="ptt"] .step__icon::after {
   background-image: var(--step-icon-ptt);
+  display: inline-flex;
+  content: "";
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  min-height: 18px;
+  background-repeat: no-repeat;
+
+}
+.step[data-step-type="ptt"] .step__caption-field::after {
+  visibility: hidden;
 }
 
-.step[data-step-type="ptv"]::after {
+.step[data-step-type="ptv"] .step__icon::after {
   background-image: var(--step-icon-ptv);
+  display: inline-flex;
+  content: "";
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  min-height: 18px;
+  background-repeat: no-repeat;
 }
 
-.step[data-step-type="image"]::after {
+.step[data-step-type="image"] .step__icon::after {
   background-image: var(--step-icon-image);
+  display: inline-flex;
+  content: "";
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  min-height: 18px;
+  background-repeat: no-repeat;
 }
 
-.step[data-step-type="video"]::after {
+.step[data-step-type="video"] .step__icon::after {
   background-image: var(--step-icon-video);
+  display: inline-flex;
+  content: "";
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  min-height: 18px;
+  background-repeat: no-repeat;
 }
 
-.step[data-step-type="file"]::after {
+.step[data-step-type="file"] .step__icon::after {
   background-image: var(--step-icon-file);
+  display: inline-flex;
+  content: "";
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  min-height: 18px;
+  background-repeat: no-repeat;
 }
 
-.step[data-step-type="delay"]::after {
+.step[data-step-type="delay"] .step__icon::after {
   background-image: var(--step-icon-delay);
+  display: inline-flex;
+  content: "";
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  min-height: 18px;
+  background-repeat: no-repeat;
 }
 
-.step[data-step-type="tag"]::after {
+.step[data-step-type="tag"] .step__icon::after {
   background-image: var(--step-icon-tag);
+  display: inline-flex;
+  content: "";
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  min-height: 18px;
+  background-repeat: no-repeat;
 }
 
-.step[data-step-type="webhook"]::after {
+.step[data-step-type="webhook"] .step__icon::after {
   background-image: var(--step-icon-webhook);
+ display: inline-flex;
+  content: "";
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  min-height: 18px;
+  background-repeat: no-repeat;
 }
 
 .step.is-selected {
@@ -1015,12 +1096,12 @@ select {
   background: rgba(255, 255, 255, 0.06);
   border: 1px solid rgba(255, 255, 255, 0.15);
   color: rgba(237, 236, 255, 0.95);
-  padding: 6px 36px 6px 14px;
+  padding: 4px 8px;
   border-radius: 10px;
   min-width: 120px;
   max-width: 170px;
   letter-spacing: 0.1px;
-  font-size: 13px;
+  font-size: 12px;
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
   white-space: nowrap;
   overflow: hidden;

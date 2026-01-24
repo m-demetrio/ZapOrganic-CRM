@@ -569,11 +569,11 @@ const init = async () => {
 
       const controls = document.createElement("div");
       controls.className = "funnel-preview__audio-controls";
-      const playButton = document.createElement("button");
+      const playButton = document.createElement("div");
       playButton.type = "button";
       playButton.className = "funnel-preview__audio-play";
       playButton.setAttribute("aria-label", "Reproduzir audio");
-      playButton.innerHTML = "▶";
+      //playButton.innerHTML = "<svg viewBox='0 0 24 24' aria-hidden='true'><path d='M8 5v14l11-7z'></path></svg>";
       const waveform = document.createElementNS("http://www.w3.org/2000/svg", "svg");
       waveform.setAttribute("viewBox", "0 0 120 32");
       waveform.setAttribute("role", "presentation");
@@ -813,7 +813,7 @@ const init = async () => {
       stepElement.innerHTML = `
         <div class="step__header">
           <div class="step__meta">
-            <span class="step__icon"></span>
+            <div class="step__icon"></div>
             <span class="step__index">Etapa ${index + 1}</span>
             <select class="input input--small" data-field="type">
               <option value="text">Texto</option>
