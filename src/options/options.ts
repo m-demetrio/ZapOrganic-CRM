@@ -813,6 +813,7 @@ const init = async () => {
       stepElement.innerHTML = `
         <div class="step__header">
           <div class="step__meta">
+            <span class="step__icon"></span>
             <span class="step__index">Etapa ${index + 1}</span>
             <select class="input input--small" data-field="type">
               <option value="text">Texto</option>
